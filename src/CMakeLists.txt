@@ -4,5 +4,5 @@ project( RainProject )
 find_package( OpenCV REQUIRED )
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
-add_executable( rain main.cpp )
+add_executable( rain main.cpp ssim.cpp )
 target_link_libraries( rain ${OpenCV_LIBS} )

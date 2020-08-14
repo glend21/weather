@@ -18,6 +18,9 @@
 #include <vector>
 #include <cstdarg>
 
+#include "ssim.hpp"
+
+
 #define _DEBUG
 #define IMG_TYPE ".png"     // This gets used directly to build the input file list
 
@@ -174,6 +177,10 @@ int process( const std::vector< std::string>& images )
 
                                 cv::imshow( "Remap", dest );
                                 cv::waitKey( 0 );
+
+                                // FIXME
+                                //parm->ssimScores[ chnl ] = getMSSIM( channelsTest[ chnl ], dest );
+                                //dbg( "Chnl %d: %f", chnl, parm->ssimScores[ chnl ] );
                             }
                         }
                       );
