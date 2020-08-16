@@ -13,6 +13,7 @@ TODOs:
     - permutations of o-flow parameters
     - output of parameter file
     - find max of the SSIM scalar (isn't it really a vector though?)
+    - multi-thread the individual channel processing
 
     - [p] download of images
         - all available for a radar site for training purposes
@@ -33,6 +34,7 @@ TODOs:
 #include <string>
 #include <vector>
 #include <cstdarg>
+#include <thread>
 
 #include "ssim.hpp"
 
@@ -57,6 +59,20 @@ struct FarnebackParams {
 
 
 // Fwd declarations, what a thing!
+bool processTriple( const std::string& fname1, 
+                    const std::string& fname2, 
+                    const std::string& testFname,
+                    std::vector< FarnebackParams* > params );
+bool processWithParam( const IMGVEC& img1, 
+                       const IMGVEC& img2, 
+                       const cv::Mat& test, 
+                       FarnebackParams* parm );
+void processChannel_t( const cv::Mat& img1,
+                       const cv::Mat& img2,
+                       cv::Mat& dest,
+                       FarnebackParams*& parm );
+void getChannels_t( const std::string& fname, IMGVEC& img );
+
 int process( const std::vector< std::string>& imageFiles, std::vector< FarnebackParams* > params );
 void buildParams( std::vector< FarnebackParams* >& params );
 void cleanupParams( std::vector< FarnebackParams* >& params );
@@ -138,12 +154,146 @@ int main( int argc, char **argv )
     std::vector< FarnebackParams* > params;
     buildParams( params );
 
-    retval = process( srcList, params );
+    for ( int idx = 0; idx < srcList.size() - 2; ++idx )
+    {
+        retval = processTriple( srcList[ idx ], srcList[ idx + 1 ], srcList[ idx + 2 ], params );
+
+        dbg( "SSIM vector: (%f, %f, %f)", 
+             params[0]->ssimScore[ 0 ],
+             params[0]->ssimScore[ 1 ],
+             params[0]->ssimScore[ 2 ] );
+        break;
+    }
+
+    //retval = process( srcList, params );
     return retval;
 }
 
 
-int process( const std::vector< std::string>& imageFiles, std::vector< FarnebackParams* > params )
+bool processTriple( const std::string& fname1, 
+                    const std::string& fname2, 
+                    const std::string& testFname,
+                    std::vector< FarnebackParams* > params )
+{
+    static bool first = true;
+    IMGVEC img1(3), img2(3);
+    cv::Mat imgTest;
+
+    if ( first )
+    {
+        // I don't actually think I want to thread here
+        std::cout << "about to thread" << std::endl;
+        std::thread readFirst( getChannels_t, fname1, std::ref( img1 ) );
+        std::thread readSecond( getChannels_t, fname2, std::ref( img2 ) );
+
+        readFirst.join();
+        readSecond.join();
+        first = false;
+    }
+    else
+    {
+
+    }  
+
+    imgTest = cv::imread( testFname, cv::IMREAD_COLOR );
+    if (img1.empty() || img2.empty() || imgTest.empty())
+    {
+        return false;
+    }
+
+    // Run the algorithm
+    std::for_each( params.begin(),
+                   params.end(),
+                   [img1, img2, imgTest] ( FarnebackParams* parm ) mutable
+        {
+            processWithParam( img1, img2, imgTest, parm );
+        }
+    );
+
+    // FIXME error handling
+    return true;
+}
+
+
+bool processWithParam( const IMGVEC& img1, 
+                       const IMGVEC& img2, 
+                       const cv::Mat& test, 
+                       FarnebackParams* parm )
+{
+    IMGVEC dest( 3 );       // generated single-channel image
+    std::vector< std::thread > tasks;  // pre-channel threads
+
+    // Per-channel processing
+    for( int chnl = 0; chnl < 3; ++chnl )
+    {
+        std::thread task( processChannel_t, 
+                          std::ref( img1[ chnl ] ),
+                          std::ref( img2[ chnl ] ),
+                          std::ref( dest[ chnl ] ),
+                          std::ref( parm ) );
+        tasks.push_back( std::move( task ) );
+    }
+
+    std::for_each( tasks.begin(), tasks.end(), []( std::thread& p ) { p.join(); } ); 
+
+    // I should now have the 3 channels of an output image. Let's see
+    cv::Mat fwd;
+    cv::merge( dest, fwd );
+
+    cv::imshow( "FWD", fwd );
+    cv::waitKey( 0 );
+
+    // And use the full-colour structural similarity algorithm to determine our "fit"
+    parm->ssimScore = getMSSIM( fwd, test );
+
+/*
+    // Save the generated image for reference / amusement
+    std::stringstream outName;
+    outName << "GEN." << imageFiles[ idx + 2 ];
+    dbg( outName.str().c_str() );
+    cv::imwrite( outName.str().c_str(), fwd );
+*/
+
+    return true;
+}
+
+
+void processChannel_t( const cv::Mat& img1,
+                   const cv::Mat& img2,
+                   cv::Mat& dest,
+                   FarnebackParams*& parm )
+{
+    cv::Mat flow;       // optical flow data
+    generateFlow( img1, img2, flow, parm );
+    dbg( "flow generated" );
+
+    remapImage( img2, dest, flow );
+    dbg( "remapped" );
+}
+
+
+void getChannels_t( const std::string& fname, IMGVEC& img )
+{
+    std::for_each( img.begin(), img.end(), []( cv::Mat& chnl ) { chnl.release();} );
+    cv::Mat colour = cv::imread( fname, cv::IMREAD_COLOR );
+
+    // cv::imshow( "getChannels() Colour", colour );
+    // cv::waitKey(0);
+
+    if (colour.empty())
+    {
+        dbg( "Could not read image from %s", fname );
+    }
+    else
+    {
+        dbg( "read colour %s", fname.c_str() );
+        cv::split( colour, img );
+        dbg( "split into channels" );
+    }
+}
+
+// - - - - - - - - - - - - - - -
+int process( const std::vector< std::string >& imageFiles, std::vector< FarnebackParams* > params )
 {
     bool first = true;
 
@@ -195,7 +345,7 @@ int process( const std::vector< std::string>& imageFiles, std::vector< Farneback
         //               [ &img1, &img2, &imgRef, &imgTest ]( FarnebackParams* parm ) mutable
         for ( std::vector< FarnebackParams* >::iterator parm = params.begin(); parm != params.end(); ++parm )
         {
-            // This is going to be one hell of a lmbda
+            // This is going to be one hell of a lambda
             IMGVEC flow( 3 );       // = createImageVector( img1[ 0 ].size() );    // optical flow data
             IMGVEC dest( 3 );       // = createImageVector( img1[ 0 ].size() );    // generated single-channel image
 
