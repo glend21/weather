@@ -72,12 +72,9 @@ void processChannel_t( const cv::Mat& img1,
                        cv::Mat& dest,
                        FarnebackParams*& parm );
 void getChannels_t( const std::string& fname, IMGVEC& img );
-
-int process( const std::vector< std::string>& imageFiles, std::vector< FarnebackParams* > params );
 void buildParams( std::vector< FarnebackParams* >& params );
 void cleanupParams( std::vector< FarnebackParams* >& params );
 std::vector< cv::Mat > getChannels( const cv::String& filename );
-std::vector< cv::Mat > createImageVector( const cv::Size& sz );
 void generateFlow( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& flow, FarnebackParams* params );
 void remapImage( const cv::Mat& src, cv::Mat& dest, const cv::Mat& flow );
 void dbg( std::string fmt, ... );
@@ -292,105 +289,6 @@ void getChannels_t( const std::string& fname, IMGVEC& img )
     }
 }
 
-// - - - - - - - - - - - - - - -
-int process( const std::vector< std::string >& imageFiles, std::vector< FarnebackParams* > params )
-{
-    bool first = true;
-
-    for ( int idx = 0; idx < imageFiles.size() - 2; ++idx )
-    {
-        IMGVEC img1;
-        IMGVEC img2;
-        cv::Mat imgRef;
-        IMGVEC imgTest;
-
-        if (first)
-        {
-            // Split each input image into BGR channels
-            img1 = getChannels( imageFiles[ idx ] );
-            img2 = getChannels( imageFiles[ idx + 1 ] );
-            first = false;
-        }
-        else
-        {
-            std::copy( img2.begin(), img2.end(), img1.begin() );
-            cv::split( imgRef, imgTest );
-            /*
-            for( int idx = 0; idx < 3; ++idx )
-            {
-                // Copy 2 to 1, Test to 2
-                img2[ idx ].copyTo( img1[ idx ] );
-                imgTest[ idx ].copyTo( img2[ idx ] );
-            }
-            */
-        }
-
-        // Always fetch the next test image
-        dbg( "pre" );
-        imgRef = cv::imread( imageFiles[ idx + 2 ], cv::IMREAD_COLOR);
-
-        if (img1.empty() || img2.empty() || imgRef.empty())
-        {
-            return -1;
-        }
-
-        // cv::imshow( "B 1", img1[ 0 ] );
-        // cv::imshow( "G 1", img1[ 1 ] );
-        // cv::imshow( "R 1", img1[ 2 ] );
-        // cv::waitKey( 0 );
-        
-        // Iterate over all parameter sets, generating an optical flow array for each channel
-        //std::for_each( params.begin(),
-        //               params.end(),
-        //               [ &img1, &img2, &imgRef, &imgTest ]( FarnebackParams* parm ) mutable
-        for ( std::vector< FarnebackParams* >::iterator parm = params.begin(); parm != params.end(); ++parm )
-        {
-            // This is going to be one hell of a lambda
-            IMGVEC flow( 3 );       // = createImageVector( img1[ 0 ].size() );    // optical flow data
-            IMGVEC dest( 3 );       // = createImageVector( img1[ 0 ].size() );    // generated single-channel image
-
-            // Generate the flow data for each colour channel
-            for( int chnl = 0; chnl < 3; ++chnl )
-            {
-                generateFlow( img1[ chnl ], img2[ chnl ], flow[ chnl ], *parm );
-                dbg( "flow generated %d", chnl );
-
-                remapImage( img2[ chnl ], dest[ chnl ], flow[ chnl ] );
-                dbg( "remapped %d", chnl );
-
-            }
-
-            // cv::imshow( "Remap B", dest[ Blue ] );
-            // cv::imshow( "Remap G", dest[ Green ] );
-            // cv::imshow( "Remap R", dest[ Red ] );
-            // cv::waitKey( 0 );
-
-            // TODO
-            // Now we combine the separate channels back into a BGR image
-            cv::Mat fwd;
-            cv::merge( dest, fwd );
-
-            cv::imshow( "FWD", fwd );
-            cv::waitKey( 0 );
-
-            // And use the full-colour structural similarity algorithm to determine our "fit"
-            (*parm)->ssimScore = getMSSIM( fwd, imgRef );
-            dbg( "SSIM vector: (%f, %f, %f)", 
-                 (*parm)->ssimScore[ 0 ],
-                 (*parm)->ssimScore[ 1 ],
-                 (*parm)->ssimScore[ 2 ] );
-
-            // Save the generated image for reference / amusement
-            std::stringstream outName;
-            outName << "GEN." << imageFiles[ idx + 2 ];
-            dbg( outName.str().c_str() );
-            cv::imwrite( outName.str().c_str(), fwd );
-      }
-
-      break;
-    }
-}
-
 
 void buildParams( std::vector< FarnebackParams* >& params )
 {
@@ -408,20 +306,6 @@ void buildParams( std::vector< FarnebackParams* >& params )
         params.push_back( pParm );
         break;
     }
-}
-
-
-std::vector< cv::Mat > createImageVector( const cv::Size& sz )
-{
-    std::vector< cv::Mat > vec;
-    cv::Mat chnl = cv::Mat::zeros( sz, CV_8UC1 );
-
-    for( int i = 0; i < 3; ++i )
-    {
-        vec.push_back( chnl );
-    }
-
-    return vec;
 }
 
 
