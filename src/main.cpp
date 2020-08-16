@@ -7,13 +7,12 @@
 
 /*
 TODOs:
-    - proper cmd-line
+    SORT OF proper cmd-line
     - output of generated images to subdir for visual inspection
         - specify the output dir
-    - permutations of o-flow parameters
+    - permutations of o-flow parameters (from input file)
     - output of parameter file
     - find max of the SSIM scalar (isn't it really a vector though?)
-    - multi-thread the individual channel processing
 
     - [p] download of images
         - all available for a radar site for training purposes
@@ -46,6 +45,13 @@ TODOs:
 typedef enum { Blue, Green, Red } CHANNELS;
 typedef std::vector< cv::Mat > IMGVEC;
 
+struct CmdLineParams {
+    char* srcDir;
+    char* destDir;
+    char* paramFile;
+    bool doTrain;
+};
+
 struct FarnebackParams {
     float scale;
     int levels,
@@ -59,6 +65,7 @@ struct FarnebackParams {
 
 
 // Fwd declarations, what a thing!
+bool processCmdLine( int argc, char** argv, struct CmdLineParams& params );
 bool processTriple( const std::string& fname1, 
                     const std::string& fname2, 
                     const std::string& testFname,
@@ -72,7 +79,7 @@ void processChannel_t( const cv::Mat& img1,
                        cv::Mat& dest,
                        FarnebackParams*& parm );
 void getChannels_t( const std::string& fname, IMGVEC& img );
-void buildParams( std::vector< FarnebackParams* >& params );
+void buildParams( std::string fname, std::vector< FarnebackParams* >& params );
 void cleanupParams( std::vector< FarnebackParams* >& params );
 std::vector< cv::Mat > getChannels( const cv::String& filename );
 void generateFlow( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& flow, FarnebackParams* params );
@@ -106,16 +113,22 @@ int main( int argc, char **argv )
             Move the second BGR image into the first slot, the test image into the second slot
     */
 
-    // TODO proper cmd-line handling
-    if (argc == 1)
+    CmdLineParams options;
+    bool b = processCmdLine( argc, argv, options );
+    std::cout << "res: " << b << std::endl;
+    std::cout << "train? " << options.doTrain << std::endl;
+    std::cout << "param file name: " << options.paramFile << std::endl;
+    std::cout << "src dir: " << options.srcDir << std::endl;
+    std::cout << "dest dir: " << options.destDir << std::endl;
+    if ( ! b )
     {
-        usage();
+        std::cout << "Usage: rain [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir> [<dest-dir>]" << std::endl;
         return -1;
     }
 
     // Get all the src images. Easier if we cache the names, as iterating over them is non-trivial
     std::vector< std::string > srcList;
-    DIR* dir = opendir( argv[1] );
+    DIR* dir = opendir( options.srcDir );
     if ( dir )
     {
         struct dirent *ent;
@@ -149,7 +162,7 @@ int main( int argc, char **argv )
     }
 
     std::vector< FarnebackParams* > params;
-    buildParams( params );
+    buildParams( options.paramFile, params );
 
     for ( int idx = 0; idx < srcList.size() - 2; ++idx )
     {
@@ -164,6 +177,53 @@ int main( int argc, char **argv )
 
     //retval = process( srcList, params );
     return retval;
+}
+
+
+bool processCmdLine( int argc, char** argv, struct CmdLineParams& params )
+{
+    bool foundAction = false;
+
+    if (argc > 1)
+    {
+        for ( /*char* arg = argv[1]*/; *argv; ++argv )
+        {
+            std::string str( *argv );
+            std::cout << str << std::endl;
+
+            if ( str == "-t" || str == "--train" )
+            {
+                params.doTrain = true;
+                foundAction = true;
+            }
+            else if ( str == "-r" || str == "--run" )
+            {
+                foundAction = true;
+            }
+            else 
+            {
+                if ( foundAction )
+                {
+                    if ( ! params.paramFile )
+                    {
+                        params.paramFile = *argv;
+                    }
+                    else if ( ! params.srcDir )
+                    {
+                        params.srcDir = *argv;
+                    }
+                    else
+                    {
+                        params.destDir = *argv;
+                    }
+                }
+            }
+        }
+
+        return ( foundAction && params.paramFile && params.srcDir );
+    }
+
+    return false;
 }
 
 
@@ -290,7 +350,7 @@ void getChannels_t( const std::string& fname, IMGVEC& img )
 }
 
 
-void buildParams( std::vector< FarnebackParams* >& params )
+void buildParams( const std::string& fname, std::vector< FarnebackParams* >& params )
 {
     for( int iscale = 1; iscale < 10; ++iscale )
     {
