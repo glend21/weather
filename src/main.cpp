@@ -80,6 +80,8 @@ void processChannel_t( const cv::Mat& img1,
                        cv::Mat& dest,
                        FarnebackParams*& parm );
 void getChannels_t( const std::string& fname, IMGVEC& img );
+
+
 void buildParams( const std::string& fname, std::vector< FarnebackParams* >& params );
 void cleanupParams( std::vector< FarnebackParams* >& params );
 std::vector< cv::Mat > getChannels( const cv::String& filename );
@@ -95,21 +97,23 @@ int main( int argc, char **argv )
 {
     int retval = 0;
 
-    long n = 0l;
+    // - - -
     try
     {
         for ( long n = 0l; ; ++n )
         {
-            OpticalFlowABC& fb = OpticalFlowABC::generate( "fb" );
+            OpticalFlowABC& fb = OpticalFlowABC::generate( "fb", 50 );
             fb.save( std::string( "training.csv" ) );
             delete &fb;
-            std::cout << n << std::endl;
+            dbg( "%d", n );
         }
     }
     catch ( RainException& ex )
     {
-        std::cout << "Then End." << std::endl;
+        std::cout << "The End." << std::endl;
     }
+    return 0;
+    // - - -
 
     /*
         Iterate over a list of radar images
@@ -177,6 +181,24 @@ int main( int argc, char **argv )
         std::cout << "Need at least 3 images in the source dir";
         return EXIT_FAILURE;
     }
+
+    // New algo starts here
+    try
+    {
+        for ( long n = 0l; ; ++n )
+        {
+            OpticalFlowABC& fb = OpticalFlowABC::generate( "fb", 50 );
+            fb.save( std::string( "training.csv" ) );
+            delete &fb;
+            dbg( "%d", n );
+        }
+    }
+    catch ( RainException& ex )
+    {
+        std::cout << "The End." << std::endl;
+    }
+    // - - -
+
 
     std::vector< FarnebackParams* > params;
     buildParams( options.paramFile, params );

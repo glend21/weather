@@ -110,6 +110,9 @@ bool FarnebackFlow::save( const std::string& fname )
         << this->smoothingSize << ','
         << this->iterations << ','
         << this->polyArea << ','
-        << this->polyWidth << ',' << std::endl;
+        << this->polyWidth << ',' 
+        << this->ssimScore[0] << ',' << this->ssimScore[1] << ',' << this->ssimScore[1]
+        << cv::mean( this->ssimScore ) << ','
+        << std::endl;
     ofh.close();
 }

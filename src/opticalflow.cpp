@@ -5,14 +5,24 @@
 #include <string.h>
 
 
-OpticalFlowABC& OpticalFlowABC::generate( const char* mnemonic )
+OpticalFlowABC& OpticalFlowABC::generate( const char* mnemonic, long limit )
 {
-    // I hate using std::string for trival strings and I hate using
-    // C-style string functions
-    if (! strcmp( mnemonic, "fb" ) )
+    static long count = 0l;
+
+    if (count == limit)
     {
-        FarnebackFlow::FarnebackGenerator gen;
-        return gen();
+        throw RainException( "Limit reached." );
+    }
+    else
+    {
+        // I hate using std::string for trival strings and I hate using
+        // C-style string functions
+        if ( ! strcmp( mnemonic, "fb" ) )
+        {
+            FarnebackFlow::FarnebackGenerator gen;
+            ++count;
+            return gen();
+        }
     }
 }
 
