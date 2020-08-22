@@ -25,13 +25,14 @@ protected:
     cv::Scalar ssimScore;
 
 public:
-    //virtual const char* mnemonic() = 0;
-
     static OpticalFlowABC& generate( const char* mnemonic, long limit = 100l );
 
-    virtual bool execute( const cv::Mat& img1, const cv::Mat& img2 ) = 0;
+    virtual bool execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& imgOut ) = 0;
 
-    virtual bool save( const std::string& fname ) = 0;
+    virtual void paramHeaders( std::string& str ) = 0;
+    virtual void params( std::string& str ) = 0;
+
+    void storeFit( const cv::Scalar& fit ) { this->ssimScore = fit; };
 };
 
 #endif

@@ -2,9 +2,7 @@
 #include "farneback_flow.hpp"
 
 #include <vector>
-//#include <iostream>
-#include <fstream>
-// #include <ios>
+#include <sstream>
 
 #include <opencv2/video/tracking.hpp>
 
@@ -82,11 +80,13 @@ FarnebackFlow::FarnebackFlow(
 }
 
 
-bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2 )
+bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& imgOut )
 {
+    cv::Mat flow;
+
     cv::calcOpticalFlowFarneback( img1,                 // An input image
                                   img2,                 // Image immediately subsequent to 'prevImg'
-                                  this->flow,           // Flow vectors will be recorded here
+                                  flow,                 // Flow vectors will be recorded here
                                   this->scale,         // Scale between pyramid levels (< '1.0')
                                   this->levels,        // Number of pyramid levels
                                   this->smoothingSize, // Size of window for pre-smoothing pass
@@ -95,24 +95,51 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2 )
                                   this->polyWidth,     // Width of fit polygon, usually '1.2*polyN'
                                   0 );                  // Option flags, combine with OR operator
 
+    cv::remap( img2,            // starting image for the extrapolation
+               imgOut,          // output image
+               flow,            // mapping matrix
+               cv::Mat(),       // y mapping matrix, not needed here as flow is (x,y) data
+               cv::INTER_LINEAR,   // interpolation method
+               cv::BORDER_TRANSPARENT,  // border mode for extrapolations
+               0 );             // border value, not needed here
+
     return true;
 }
 
 
-bool FarnebackFlow::save( const std::string& fname )
+void FarnebackFlow::paramHeaders( std::string& str )
 {
-    std::ofstream ofh;
+    std::stringstream osh;
 
-    ofh.open( fname, std::ios::app );
-    ofh << "fb,"
+    osh << "Algo"
+        << "scale" <<','
+        << "levels" << ','
+        << "smoothingSize" << ','
+        << "iterations" << ','
+        << "polyArea" << ','
+        << "polyWidth" << ',' 
+        << "ssimScore_B" << ','
+        << ">ssimScore_G" << ',' 
+        << "ssimScore_R" << ','
+        << "ssimScore_mean";
+
+    str = osh.str();
+}
+
+
+void FarnebackFlow::params( std::string& str )
+{
+    std::stringstream osh;
+
+    osh << "fb,"
         << this->scale <<','
         << this->levels << ','
         << this->smoothingSize << ','
         << this->iterations << ','
         << this->polyArea << ','
         << this->polyWidth << ',' 
-        << this->ssimScore[0] << ',' << this->ssimScore[1] << ',' << this->ssimScore[1]
-        << cv::mean( this->ssimScore ) << ','
-        << std::endl;
-    ofh.close();
+        << this->ssimScore[0] << ',' << this->ssimScore[1] << ',' << this->ssimScore[1] << ','
+        << cv::mean( this->ssimScore );
+
+    str = osh.str();
 }

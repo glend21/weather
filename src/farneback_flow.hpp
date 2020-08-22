@@ -21,7 +21,7 @@ private:
         polyArea;
     float polyWidth;
 
-    cv::Mat flow;       // FIXME this may move up to the base class
+    //cv::Mat dest;       // FIXME this may move up to the base class
 
 public:
     class FarnebackGenerator : OpticalFlowABC::Generator
@@ -39,10 +39,10 @@ public:
         int polyArea,
         float polyWidth );
 
-    virtual bool execute( const cv::Mat& img1, const cv::Mat& img2 );
+    virtual bool execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& imgOut );
 
-    virtual bool save( const std::string& fname );
-
+    virtual void paramHeaders( std::string& str );
+    virtual void params( std::string& str );
 };
 
 #endif

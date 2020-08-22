@@ -1,7 +1,7 @@
 /*
  * Use optical flowing tracking to predict rain movements from radar images
  *
- * Usage: rain [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir>
+ * Usage: rain -a|--algo <algo> [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir> <dest-dir>
  *
  */
 
@@ -27,9 +27,11 @@ TODOs:
 #include <opencv2/imgproc.hpp>
 #include <opencv2/video/tracking.hpp>
 
+#include <string.h>
 #include <dirent.h>
 
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <vector>
 #include <cstdarg>
@@ -47,6 +49,7 @@ typedef enum { Blue, Green, Red } CHANNELS;
 typedef std::vector< cv::Mat > IMGVEC;
 
 struct CmdLineParams {
+    char* algo;
     char* srcDir;
     char* destDir;
     char* paramFile;
@@ -67,18 +70,22 @@ struct FarnebackParams {
 
 // Fwd declarations, what a thing!
 bool processCmdLine( int argc, char** argv, struct CmdLineParams& params );
+bool train( const CmdLineParams& options );
+int run( const CmdLineParams& options );
+/*
 bool processTriple( const std::string& fname1, 
                     const std::string& fname2, 
                     const std::string& testFname,
                     std::vector< FarnebackParams* > params );
+*/
 bool processWithParam( const IMGVEC& img1, 
                        const IMGVEC& img2, 
                        const cv::Mat& test, 
-                       FarnebackParams* parm );
+                       OpticalFlowABC& proc );
 void processChannel_t( const cv::Mat& img1,
                        const cv::Mat& img2,
                        cv::Mat& dest,
-                       FarnebackParams*& parm );
+                       OpticalFlowABC& proc );
 void getChannels_t( const std::string& fname, IMGVEC& img );
 
 
@@ -97,7 +104,7 @@ int main( int argc, char **argv )
 {
     int retval = 0;
 
-    // - - -
+    /*// - - -
     try
     {
         for ( long n = 0l; ; ++n )
@@ -114,6 +121,7 @@ int main( int argc, char **argv )
     }
     return 0;
     // - - -
+    */
 
     /*
         Iterate over a list of radar images
@@ -137,18 +145,77 @@ int main( int argc, char **argv )
     CmdLineParams options;
     bool b = processCmdLine( argc, argv, options );
     std::cout << "res: " << b << std::endl;
+    std::cout << "algo: " << options.algo << std::endl;
     std::cout << "train? " << options.doTrain << std::endl;
     std::cout << "param file name: " << options.paramFile << std::endl;
     std::cout << "src dir: " << options.srcDir << std::endl;
     std::cout << "dest dir: " << options.destDir << std::endl;
     if ( ! b )
     {
-        std::cout << "Usage: rain [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir> [<dest-dir>]" << std::endl;
+        std::cout << "Usage: rain -a|--algo algo [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir> [<dest-dir>]" << std::endl;
         return -1;
     }
+    return 0;
 
-    // Get all the src images. Easier if we cache the names, as iterating over them is non-trivial
-    std::vector< std::string > srcList;
+    if ( options.doTrain )
+    {
+        return train( options );
+    }
+    else
+    {
+        return run( options );
+    }
+}
+
+
+bool processCmdLine( int argc, char** argv, struct CmdLineParams& params )
+{
+    if (argc > 1)
+    {
+        for ( ++argv; *argv; ++argv )
+        {
+            if ( ! strcmp( *argv, "-a" ) || ! strcmp( *argv, "--algo" ) )
+            {
+                params.algo = *(++argv);
+            }
+            else if ( ! strcmp( *argv, "-t" ) || ! strcmp( *argv, "--train" ) )
+            {
+                params.doTrain = true;
+                params.paramFile = *(++argv);
+            }
+            else if ( ! strcmp( *argv, "-r" ) || ! strcmp( *argv, "--run" ) )
+            {
+                params.paramFile = *(++argv);
+            }
+            else 
+            {
+                if ( ! params.srcDir )
+                {
+                    params.srcDir = *argv;
+                }
+                else
+                {
+                    params.destDir = *argv;
+                }
+            }
+        }
+
+        dbg( "A: %s", params.algo );
+        dbg( "P: %s", params.paramFile );
+        dbg( "D: %s", params.srcDir );
+        return ( params.algo && params.paramFile && params.srcDir );
+    }
+
+    return false;
+}
+
+
+bool train( const CmdLineParams& options )
+{
+    // Get all the src images.
+    std::vector< std::string > srcNames;
+    IMGVEC srcData;
+
     DIR* dir = opendir( options.srcDir );
     if ( dir )
     {
@@ -161,9 +228,10 @@ int main( int argc, char **argv )
             if (pos == fname.size() - 4)
             {
                 std::stringstream path;
-                path << argv[1] << '/' << fname;
+                path << options.srcDir << '/' << fname;
                 dbg( "adding %s to src image list", path.str().c_str() );
-                srcList.push_back( path.str() );
+                srcNames.push_back( path.str() );
+                srcData.push_back( cv::imread( path.str() ) );
             }
         }
 
@@ -172,34 +240,72 @@ int main( int argc, char **argv )
     else
     {
         // could not open directory
-        dbg( "could not open %s", argv[1] );
+        dbg( "could not open %s", options.srcDir );
         return EXIT_FAILURE;
     }
 
-    if (srcList.size() < 3)
+    if (srcNames.size() < 3)
     {
         std::cout << "Need at least 3 images in the source dir";
         return EXIT_FAILURE;
     }
 
     // New algo starts here
+    std::ofstream ofh;
+    std::string line;
+
     try
     {
+        ofh.open( options.paramFile, std::ios::app );
+        if ( ofh.fail() )
+        {
+            throw RainException( "Could not open parameter file" );
+        }
+
         for ( long n = 0l; ; ++n )
         {
-            OpticalFlowABC& fb = OpticalFlowABC::generate( "fb", 50 );
-            fb.save( std::string( "training.csv" ) );
-            delete &fb;
+            OpticalFlowABC& proc = OpticalFlowABC::generate( options.algo, 5 );
+
+            // Write header to the parameter file on first iteration
+            if (n == 0l)
+            {
+                proc.paramHeaders( line );
+                ofh << line << ','
+                    << "image_1" << ','
+                    << "image_2" << ','
+                    << "image_test" << std::endl;
+            }
+
+            // Iterate over all image pairs (bar the last) for this set of algorithm parameters
+            for ( int idx = 0; idx < srcData.size() - 2; ++idx )
+            {
+                // TODO the actual processing
+                processWithParam( srcData[ idx ], 
+                                  srcData[ idx + 1 ], 
+                                  srcData[ idx + 2 ],
+                                  proc );
+
+                proc.params( line );
+                ofh << line << ','
+                    << srcNames[ idx ] << ','
+                    << srcNames[ idx + 1 ] << ','
+                    << srcNames[ idx + 2 ] << std::endl;
+            }
+
+            delete &proc;
             dbg( "%d", n );
         }
+
+        ofh.close();
     }
     catch ( RainException& ex )
     {
-        std::cout << "The End." << std::endl;
+        std::cout << "Exception: " << ex.getMsg() << std::endl;
+        ofh.close();
     }
     // - - -
 
-
+    /*
     std::vector< FarnebackParams* > params;
     buildParams( options.paramFile, params );
 
@@ -213,59 +319,19 @@ int main( int argc, char **argv )
              params[0]->ssimScore[ 2 ] );
         break;
     }
+    */
 
-    //retval = process( srcList, params );
-    return retval;
+    return 0;
 }
 
 
-bool processCmdLine( int argc, char** argv, struct CmdLineParams& params )
+int run( const CmdLineParams& options )
 {
-    bool foundAction = false;
-
-    if (argc > 1)
-    {
-        for ( /*char* arg = argv[1]*/; *argv; ++argv )
-        {
-            std::string str( *argv );
-            std::cout << str << std::endl;
-
-            if ( str == "-t" || str == "--train" )
-            {
-                params.doTrain = true;
-                foundAction = true;
-            }
-            else if ( str == "-r" || str == "--run" )
-            {
-                foundAction = true;
-            }
-            else 
-            {
-                if ( foundAction )
-                {
-                    if ( ! params.paramFile )
-                    {
-                        params.paramFile = *argv;
-                    }
-                    else if ( ! params.srcDir )
-                    {
-                        params.srcDir = *argv;
-                    }
-                    else
-                    {
-                        params.destDir = *argv;
-                    }
-                }
-            }
-        }
-
-        return ( foundAction && params.paramFile && params.srcDir );
-    }
-
-    return false;
+    return -1;
 }
 
 
+/*
 bool processTriple( const std::string& fname1, 
                     const std::string& fname2, 
                     const std::string& testFname,
@@ -288,7 +354,7 @@ bool processTriple( const std::string& fname1,
     }
     else
     {
-
+        // FIXME what did I intend to put here?
     }  
 
     imgTest = cv::imread( testFname, cv::IMREAD_COLOR );
@@ -309,12 +375,15 @@ bool processTriple( const std::string& fname1,
     // FIXME error handling
     return true;
 }
+*/
 
-
+// Accepts 2 images, split into their BGR channels, a test image and a processor object
+// Calls the processor to generate the output channels, combines them into a BGR output
+//  image, compares it to the test image.
 bool processWithParam( const IMGVEC& img1, 
                        const IMGVEC& img2, 
                        const cv::Mat& test, 
-                       FarnebackParams* parm )
+                       OpticalFlowABC& proc )
 {
     IMGVEC dest( 3 );       // generated single-channel image
     std::vector< std::thread > tasks;  // pre-channel threads
@@ -326,7 +395,7 @@ bool processWithParam( const IMGVEC& img1,
                           std::ref( img1[ chnl ] ),
                           std::ref( img2[ chnl ] ),
                           std::ref( dest[ chnl ] ),
-                          std::ref( parm ) );
+                          std::ref( proc ) );
         tasks.push_back( std::move( task ) );
     }
 
@@ -340,7 +409,7 @@ bool processWithParam( const IMGVEC& img1,
     cv::waitKey( 0 );
 
     // And use the full-colour structural similarity algorithm to determine our "fit"
-    parm->ssimScore = getMSSIM( fwd, test );
+    proc.storeFit( getMSSIM( fwd, test ) );
 
 /*
     // Save the generated image for reference / amusement
@@ -355,16 +424,11 @@ bool processWithParam( const IMGVEC& img1,
 
 
 void processChannel_t( const cv::Mat& img1,
-                   const cv::Mat& img2,
-                   cv::Mat& dest,
-                   FarnebackParams*& parm )
+                       const cv::Mat& img2,
+                       cv::Mat& dest,
+                       OpticalFlowABC& proc )
 {
-    cv::Mat flow;       // optical flow data
-    generateFlow( img1, img2, flow, parm );
-    dbg( "flow generated" );
-
-    remapImage( img2, dest, flow );
-    dbg( "remapped" );
+    proc.execute( img1, img2, dest );
 }
 
 
@@ -388,7 +452,7 @@ void getChannels_t( const std::string& fname, IMGVEC& img )
     }
 }
 
-
+// TODO DELETE ME
 void buildParams( const std::string& fname, std::vector< FarnebackParams* >& params )
 {
     for( int iscale = 1; iscale < 10; ++iscale )
@@ -451,7 +515,6 @@ void generateFlow( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& flow, Farn
                                   params->polyArea,      // Area over which polynomial will be fit
                                   params->polyWidth,     // Width of fit polygon, usually '1.2*polyN'
                                   0 );                  // Option flags, combine with OR operator
-
 
 }
 
