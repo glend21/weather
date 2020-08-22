@@ -54,6 +54,15 @@ struct CmdLineParams {
     char* destDir;
     char* paramFile;
     bool doTrain;
+
+    CmdLineParams()
+    {
+        this->algo = NULL;
+        this->srcDir = NULL;
+        this->destDir = NULL;
+        this->paramFile = NULL;
+        this->doTrain = false;
+    }
 };
 
 struct FarnebackParams {
@@ -78,8 +87,8 @@ bool processTriple( const std::string& fname1,
                     const std::string& testFname,
                     std::vector< FarnebackParams* > params );
 */
-bool processWithParam( const IMGVEC& img1, 
-                       const IMGVEC& img2, 
+bool processWithParam( const cv::Mat& img1, 
+                       const cv::Mat& img2, 
                        const cv::Mat& test, 
                        OpticalFlowABC& proc );
 void processChannel_t( const cv::Mat& img1,
@@ -123,25 +132,6 @@ int main( int argc, char **argv )
     // - - -
     */
 
-    /*
-        Iterate over a list of radar images
-        For each consecutive pair - 1 (ie until first image is last - 2)
-            Load both images
-            Separate each into B, G, R channels -> 3 greyscale images per input image
-            Iterate over parameter sets
-                Generate optical flow output between each pair of colour channels
-                    Store the parameters used 
-                Remap the 3 flow images with their channel base to produce 3 channel output images
-                Combine the 3 output channels into a single BGR output
-                Load the next image as BGR <- test image
-                Separate it into channels
-                Diff (SSIM) each calculated channel image with the corresponding test channel image
-                    Store the diff scores next to the Farneback parameters
-            Note the param set with the minimised diff scores
-
-            Move the second BGR image into the first slot, the test image into the second slot
-    */
-
     CmdLineParams options;
     bool b = processCmdLine( argc, argv, options );
     std::cout << "res: " << b << std::endl;
@@ -149,13 +139,12 @@ int main( int argc, char **argv )
     std::cout << "train? " << options.doTrain << std::endl;
     std::cout << "param file name: " << options.paramFile << std::endl;
     std::cout << "src dir: " << options.srcDir << std::endl;
-    std::cout << "dest dir: " << options.destDir << std::endl;
+    //std::cout << "dest dir: " << options.destDir << std::endl;
     if ( ! b )
     {
         std::cout << "Usage: rain -a|--algo algo [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir> [<dest-dir>]" << std::endl;
         return -1;
     }
-    return 0;
 
     if ( options.doTrain )
     {
@@ -202,7 +191,8 @@ bool processCmdLine( int argc, char** argv, struct CmdLineParams& params )
 
         dbg( "A: %s", params.algo );
         dbg( "P: %s", params.paramFile );
-        dbg( "D: %s", params.srcDir );
+        dbg( "S: %s", params.srcDir );
+        dbg( "D: %s", params.destDir );
         return ( params.algo && params.paramFile && params.srcDir );
     }
 
@@ -212,6 +202,8 @@ bool processCmdLine( int argc, char** argv, struct CmdLineParams& params )
 
 bool train( const CmdLineParams& options )
 {
+    dbg( "Training ..." );
+
     // Get all the src images.
     std::vector< std::string > srcNames;
     IMGVEC srcData;
@@ -231,7 +223,7 @@ bool train( const CmdLineParams& options )
                 path << options.srcDir << '/' << fname;
                 dbg( "adding %s to src image list", path.str().c_str() );
                 srcNames.push_back( path.str() );
-                srcData.push_back( cv::imread( path.str() ) );
+                srcData.push_back( cv::imread( path.str(), cv::IMREAD_COLOR ) );
             }
         }
 
@@ -250,6 +242,7 @@ bool train( const CmdLineParams& options )
         return EXIT_FAILURE;
     }
 
+    dbg( "There are %d src images.", srcNames.size() );
     // New algo starts here
     std::ofstream ofh;
     std::string line;
@@ -279,7 +272,10 @@ bool train( const CmdLineParams& options )
             // Iterate over all image pairs (bar the last) for this set of algorithm parameters
             for ( int idx = 0; idx < srcData.size() - 2; ++idx )
             {
-                // TODO the actual processing
+                if ( srcData[ idx ].data == NULL) dbg( "READ ERROR 1" );
+                if ( srcData[ idx + 1 ].data == NULL) dbg( "READ ERROR 2" );
+                if ( srcData[ idx + 2 ].data == NULL) dbg( "READ ERROR 3" );
+
                 processWithParam( srcData[ idx ], 
                                   srcData[ idx + 1 ], 
                                   srcData[ idx + 2 ],
@@ -380,20 +376,26 @@ bool processTriple( const std::string& fname1,
 // Accepts 2 images, split into their BGR channels, a test image and a processor object
 // Calls the processor to generate the output channels, combines them into a BGR output
 //  image, compares it to the test image.
-bool processWithParam( const IMGVEC& img1, 
-                       const IMGVEC& img2, 
+bool processWithParam( const cv::Mat& img1, 
+                       const cv::Mat& img2, 
                        const cv::Mat& test, 
                        OpticalFlowABC& proc )
 {
-    IMGVEC dest( 3 );       // generated single-channel image
+    IMGVEC chnls1( 3 ), chnls2( 3 );    // per-channel image data
+    IMGVEC dest( 3 );       // generated single-channel image (NOT 1 3-channel image)
     std::vector< std::thread > tasks;  // pre-channel threads
+
+    cv::split( img1, chnls1 );
+    cv::split( img2, chnls2 );
 
     // Per-channel processing
     for( int chnl = 0; chnl < 3; ++chnl )
     {
+        dbg( "processing channel %d", chnl );
+
         std::thread task( processChannel_t, 
-                          std::ref( img1[ chnl ] ),
-                          std::ref( img2[ chnl ] ),
+                          std::ref( chnls1[ chnl ] ),
+                          std::ref( chnls2[ chnl ] ),
                           std::ref( dest[ chnl ] ),
                           std::ref( proc ) );
         tasks.push_back( std::move( task ) );
