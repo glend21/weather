@@ -4,7 +4,7 @@
 
  #include <exception>
 
-class RainException : std:exception
+class RainException : std::exception
 {
 protected:
     std::string text;

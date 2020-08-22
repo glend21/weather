@@ -36,6 +36,7 @@ TODOs:
 #include <thread>
 
 #include "ssim.hpp"
+#include "opticalflow.hpp"
 
 
 #define _DEBUG
@@ -79,7 +80,7 @@ void processChannel_t( const cv::Mat& img1,
                        cv::Mat& dest,
                        FarnebackParams*& parm );
 void getChannels_t( const std::string& fname, IMGVEC& img );
-void buildParams( std::string fname, std::vector< FarnebackParams* >& params );
+void buildParams( const std::string& fname, std::vector< FarnebackParams* >& params );
 void cleanupParams( std::vector< FarnebackParams* >& params );
 std::vector< cv::Mat > getChannels( const cv::String& filename );
 void generateFlow( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& flow, FarnebackParams* params );
@@ -93,6 +94,22 @@ using namespace std;
 int main( int argc, char **argv )
 {
     int retval = 0;
+
+    long n = 0l;
+    try
+    {
+        for ( long n = 0l; ; ++n )
+        {
+            OpticalFlowABC& fb = OpticalFlowABC::generate( "fb" );
+            fb.save( std::string( "training.csv" ) );
+            delete &fb;
+            std::cout << n << std::endl;
+        }
+    }
+    catch ( RainException& ex )
+    {
+        std::cout << "Then End." << std::endl;
+    }
 
     /*
         Iterate over a list of radar images
@@ -392,6 +409,7 @@ std::vector< cv::Mat > getChannels( const cv::String& filename )
 }
 
 
+// TODO DELETE ME
 void generateFlow( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& flow, FarnebackParams* params )
 {
     dbg( "scale is %f", params->scale );

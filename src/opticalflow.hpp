@@ -8,13 +8,12 @@
 
 #include <opencv2/core.hpp>
 
+#include "except.hpp"
+
 
 // The flow class itself
 class OpticalFlowABC
 {
-private:
-    //OpticalFlowParamsABC* params;
-
 protected:
     class Generator
     {
@@ -29,7 +28,7 @@ public:
 
     virtual bool execute( const cv::Mat& img1, const cv::Mat& img2 ) = 0;
 
-    virtual bool save( const std:string& fname ) = 0;
+    virtual bool save( const std::string& fname ) = 0;
 };
 
 #endif

@@ -2,6 +2,9 @@
 #include "farneback_flow.hpp"
 
 #include <vector>
+//#include <iostream>
+#include <fstream>
+// #include <ios>
 
 #include <opencv2/video/tracking.hpp>
 
@@ -21,32 +24,6 @@ OpticalFlowABC& FarnebackFlow::FarnebackGenerator::operator()()
     static std::vector< int > vec_area { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
     static std::vector< int >::iterator itr_area = vec_levels.begin();
 
-    if (itr_scale == vec_scale.end())
-    {
-        itr_scale = vec_scale.begin();
-        ++itr_levels;
-    }
-    if (itr_levels == vec_levels.end())
-    {
-        itr_levels = vec_levels.begin();
-        ++itr_levels;
-    }
-    if (itr_smoothing == vec_smoothing.end())
-    {
-        itr_smoothing = vec_smoothing.begin();
-        ++itr_levels;
-    }
-    if (itr_iter == vec_iterations.end())
-    {
-        itr_iter = vec_iterations.begin();
-        ++itr_levels;
-    }
-    if (itr_area == vec_area.end())
-    {
-        itr_area = vec_area.begin();
-        ++itr_levels;
-    }
-
     // Returns an initialised flow object
     FarnebackFlow* pFlow = new FarnebackFlow(
         *itr_scale,
@@ -57,10 +34,31 @@ OpticalFlowABC& FarnebackFlow::FarnebackGenerator::operator()()
         (*itr_area * 1.2) + 0.1 );
 
     ++itr_scale;
-    ++itr_levels;
-    ++itr_smoothing;
-    ++itr_iter;
-    ++itr_area;
+    if (itr_scale == vec_scale.end())
+    {
+        itr_scale = vec_scale.begin();
+        ++itr_levels;
+    }
+    if (itr_levels == vec_levels.end())
+    {
+        itr_levels = vec_levels.begin();
+        ++itr_smoothing;
+    }
+    if (itr_smoothing == vec_smoothing.end())
+    {
+        itr_smoothing = vec_smoothing.begin();
+        ++itr_iter;
+    }
+    if (itr_iter == vec_iterations.end())
+    {
+        itr_iter = vec_iterations.begin();
+        ++itr_area;
+    }
+    if (itr_area == vec_area.end())
+    {
+        // We have exhausted all combinations
+        throw RainException( "FB no more combinations" );
+    }
 
     return *pFlow;
 }
@@ -98,4 +96,20 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2 )
                                   0 );                  // Option flags, combine with OR operator
 
     return true;
+}
+
+
+bool FarnebackFlow::save( const std::string& fname )
+{
+    std::ofstream ofh;
+
+    ofh.open( fname, std::ios::app );
+    ofh << "fb,"
+        << this->scale <<','
+        << this->levels << ','
+        << this->smoothingSize << ','
+        << this->iterations << ','
+        << this->polyArea << ','
+        << this->polyWidth << ',' << std::endl;
+    ofh.close();
 }
