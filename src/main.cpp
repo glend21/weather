@@ -35,6 +35,7 @@ TODOs:
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <iomanip>
 #include <vector>
 #include <cstdarg>
 #include <thread>
@@ -93,6 +94,7 @@ bool processTriple( const std::string& fname1,
 bool processWithParam( const cv::Mat& img1, 
                        const cv::Mat& img2, 
                        const cv::Mat& test, 
+                       cv::Mat& outImg,
                        OpticalFlowABC& proc );
 void processChannel_t( const cv::Mat& img1,
                        const cv::Mat& img2,
@@ -108,7 +110,7 @@ void generateFlow( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& flow, Farn
 void remapImage( const cv::Mat& src, cv::Mat& dest, const cv::Mat& flow );
 void dbg( std::string fmt, ... );
 void usage();
-void dbgImage( const cv::Mat& img );
+bool dbgImage( const cv::Mat& img );
 
 
 using namespace std;
@@ -259,18 +261,21 @@ bool train( const CmdLineParams& options )
     }
 
     dbg( "There are %d src images.", srcNames.size() );
+
     // New algo starts here
+    std::stringstream outName;
     std::ofstream ofh;
-    std::string line;
 
     try
     {
-        ofh.open( options.paramFile );
+        outName << options.destDir << '/' << options.paramFile;
+        ofh.open( outName.str() );
         if ( ofh.fail() )
         {
             throw RainException( "Could not open parameter file" );
         }
 
+        // Iterate over all parameter combinations, until generate() throws an exception
         for ( long n = 0l; ; ++n )
         {
             dbg( "Param iteration: %d", n );
@@ -295,15 +300,44 @@ bool train( const CmdLineParams& options )
                 if ( srcData[ idx + 1 ].data == NULL) dbg( "READ ERROR 2" );
                 if ( srcData[ idx + 2 ].data == NULL) dbg( "READ ERROR 3" );
 
+                // Generate the output image
+                cv::Mat newImg;
                 processWithParam( srcData[ idx ], 
                                   srcData[ idx + 1 ], 
                                   srcData[ idx + 2 ],
+                                  newImg,
                                   proc );
 
+                // Save the output image to the correct location
+                outName.seekp( 0 );
+                outName << options.destDir << '/'
+                        << std::setfill( '0' ) << std::setw( 2 ) << std::right << idx + 1
+                        << '_' 
+                        << std::setfill( '0' ) << std::setw( 2 ) << std::right << idx + 2
+                        << '/' 
+                        << std::setfill( '0' ) << std::setw( 5 ) << std::right << n
+                        << ".jpg";
+                dbg( "Output filename ~%s~", outName.str().c_str() );
+
+                if ( cv::imwrite( outName.str(), newImg ) )
+                {
+                    dbg( "Data saved." );
+                }
+                else
+                {
+                    dbg( "NOT SAVED." );
+                }
+
+                // Save the parameter set
                 ofh << proc.params() << ','
                     << srcNames[ idx ] << ','
                     << srcNames[ idx + 1 ] << ','
                     << srcNames[ idx + 2 ] << std::endl;
+
+                if ( ! dbgImage( newImg ) )
+                {
+                    exit( 0 );
+                }
             }
 
             delete &proc;
@@ -396,6 +430,7 @@ bool processTriple( const std::string& fname1,
 bool processWithParam( const cv::Mat& img1, 
                        const cv::Mat& img2, 
                        const cv::Mat& test, 
+                       cv::Mat& outImg,
                        OpticalFlowABC& proc )
 {
     IMGVEC chnls1( 3 ), chnls2( 3 );    // per-channel image data
@@ -421,13 +456,10 @@ bool processWithParam( const cv::Mat& img1,
     std::for_each( tasks.begin(), tasks.end(), []( std::thread& p ) { p.join(); } ); 
 
     // I should now have the 3 channels of an output image. Let's see
-    cv::Mat fwd;
-    cv::merge( dest, fwd );
+    cv::merge( dest, outImg );
 
     // And use the full-colour structural similarity algorithm to determine our "fit"
-    proc.storeFit( getMSSIM( fwd, test ) );
-
-    dbgImage( fwd );
+    proc.storeFit( getMSSIM( outImg, test ) );
 
 /*
     // Save the generated image for reference / amusement
@@ -563,13 +595,11 @@ void dbg( const std::string fmt, ... )
 }
 
 
-void dbgImage( const cv::Mat& img )
+// Return true to continue
+bool dbgImage( const cv::Mat& img )
 {
     cv::imshow( "dbgImage", img );
-    if ( cv::waitKey( 0 ) == 'q' )
-    {
-        exit( 0 );
-    }
+    return cv::waitKey( 0 ) != 'q';
 }
 
 

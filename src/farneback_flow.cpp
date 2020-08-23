@@ -86,6 +86,7 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
 
     // Calculate the ()reverse) optical flow field
     // Note that we are calculating from img2 to img1. This is important
+///*
     cv::calcOpticalFlowFarneback( img2,                // ** An input image
                                   img1,                // ** Image immediately previous to img2
                                   flow,                // Flow vectors will be recorded here
@@ -96,7 +97,21 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
                                   this->polyArea,      // Area over which polynomial will be fit
                                   this->polyWidth,     // Width of fit polygon, usually '1.2*polyN'
                                   0 );                  // Option flags, combine with OR operator
-
+//*/
+/*
+ * This is a custom parameter set which seems to be common
+    cv::calcOpticalFlowFarneback( img2,                // ** An input image
+                                  img1,                // ** Image immediately previous to img2
+                                  flow,                // Flow vectors will be recorded here
+                                  0.5,         // Scale between pyramid levels (< '1.0')
+                                  3,        // Number of pyramid levels
+                                  15, // Size of window for pre-smoothing pass
+                                  3,    // Iterations for each pyramid level
+                                  5,      // Area over which polynomial will be fit
+                                  1.2,     // Width of fit polygon, usually '1.2*polyN'
+                                  0 );                  // Option flags, combine with OR operator
+*/
+    
     // OK, here's where the (other) magic happens
     // Create a mapping array from the flow data
     cv::Mat map( flow.size(), CV_32FC2 );
