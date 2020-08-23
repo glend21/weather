@@ -107,11 +107,11 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
 }
 
 
-void FarnebackFlow::paramHeaders( std::string& str )
+const std::string FarnebackFlow::paramHeaders()
 {
     std::stringstream osh;
 
-    osh << "Algo"
+    osh << "Algo" << ','
         << "scale" <<','
         << "levels" << ','
         << "smoothingSize" << ','
@@ -123,11 +123,11 @@ void FarnebackFlow::paramHeaders( std::string& str )
         << "ssimScore_R" << ','
         << "ssimScore_mean";
 
-    str = osh.str();
+    return osh.str();       // return by value as it's only little
 }
 
 
-void FarnebackFlow::params( std::string& str )
+const std::string FarnebackFlow::params()
 {
     std::stringstream osh;
 
@@ -141,5 +141,5 @@ void FarnebackFlow::params( std::string& str )
         << this->ssimScore[0] << ',' << this->ssimScore[1] << ',' << this->ssimScore[1] << ','
         << cv::mean( this->ssimScore );
 
-    str = osh.str();
+    return osh.str();       // OK to return by value
 }

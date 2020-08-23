@@ -105,6 +105,7 @@ void generateFlow( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& flow, Farn
 void remapImage( const cv::Mat& src, cv::Mat& dest, const cv::Mat& flow );
 void dbg( std::string fmt, ... );
 void usage();
+void dbgImage( const cv::Mat& img );
 
 
 using namespace std;
@@ -249,7 +250,7 @@ bool train( const CmdLineParams& options )
 
     try
     {
-        ofh.open( options.paramFile, std::ios::app );
+        ofh.open( options.paramFile );
         if ( ofh.fail() )
         {
             throw RainException( "Could not open parameter file" );
@@ -257,13 +258,14 @@ bool train( const CmdLineParams& options )
 
         for ( long n = 0l; ; ++n )
         {
+            dbg( "Param iteration: %d", n );
+
             OpticalFlowABC& proc = OpticalFlowABC::generate( options.algo, 5 );
 
             // Write header to the parameter file on first iteration
             if (n == 0l)
             {
-                proc.paramHeaders( line );
-                ofh << line << ','
+                ofh << proc.paramHeaders() << ','
                     << "image_1" << ','
                     << "image_2" << ','
                     << "image_test" << std::endl;
@@ -272,6 +274,8 @@ bool train( const CmdLineParams& options )
             // Iterate over all image pairs (bar the last) for this set of algorithm parameters
             for ( int idx = 0; idx < srcData.size() - 2; ++idx )
             {
+                dbg( "   Image-pair iteration: %d", idx );
+
                 if ( srcData[ idx ].data == NULL) dbg( "READ ERROR 1" );
                 if ( srcData[ idx + 1 ].data == NULL) dbg( "READ ERROR 2" );
                 if ( srcData[ idx + 2 ].data == NULL) dbg( "READ ERROR 3" );
@@ -281,15 +285,13 @@ bool train( const CmdLineParams& options )
                                   srcData[ idx + 2 ],
                                   proc );
 
-                proc.params( line );
-                ofh << line << ','
+                ofh << proc.params() << ','
                     << srcNames[ idx ] << ','
                     << srcNames[ idx + 1 ] << ','
                     << srcNames[ idx + 2 ] << std::endl;
             }
 
             delete &proc;
-            dbg( "%d", n );
         }
 
         ofh.close();
@@ -407,11 +409,10 @@ bool processWithParam( const cv::Mat& img1,
     cv::Mat fwd;
     cv::merge( dest, fwd );
 
-    cv::imshow( "FWD", fwd );
-    cv::waitKey( 0 );
-
     // And use the full-colour structural similarity algorithm to determine our "fit"
     proc.storeFit( getMSSIM( fwd, test ) );
+
+    dbgImage( fwd );
 
 /*
     // Save the generated image for reference / amusement
@@ -545,6 +546,17 @@ void dbg( const std::string fmt, ... )
     va_end( args );
 #endif
 }
+
+
+void dbgImage( const cv::Mat& img )
+{
+    cv::imshow( "dbgImage", img );
+    if ( cv::waitKey( 0 ) == 'q' )
+    {
+        exit( 0 );
+    }
+}
+
 
 void usage()
 {

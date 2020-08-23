@@ -29,8 +29,8 @@ public:
 
     virtual bool execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& imgOut ) = 0;
 
-    virtual void paramHeaders( std::string& str ) = 0;
-    virtual void params( std::string& str ) = 0;
+    virtual const std::string paramHeaders() = 0;
+    virtual const std::string params() = 0;
 
     void storeFit( const cv::Scalar& fit ) { this->ssimScore = fit; };
 };

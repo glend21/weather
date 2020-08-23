@@ -41,8 +41,8 @@ public:
 
     virtual bool execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& imgOut );
 
-    virtual void paramHeaders( std::string& str );
-    virtual void params( std::string& str );
+    virtual const std::string paramHeaders();
+    virtual const std::string params();
 };
 
 #endif
