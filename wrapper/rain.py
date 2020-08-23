@@ -61,7 +61,7 @@ def main( argc, argv ):
         src_count = len( [ f for f in os.listdir( real_source ) if os.path.isfile( os.path.join( real_source, f ) ) and f[ -4 : ] == __IMGTYPE ] )
         print( "%d source files" % src_count )
 
-        for i in range( 1, src_count - 2):
+        for i in range( 1, src_count - 1 ):
             ddir = os.path.join( real_dest, "%02d_%02d" % (i, i + 1) )
             print( "Making %s" % ddir )
             os.makedirs( ddir, exist_ok=True )
