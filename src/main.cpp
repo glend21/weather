@@ -1,7 +1,9 @@
 /*
  * Use optical flowing tracking to predict rain movements from radar images
  *
- * Usage: rain -a|--algo <algo> [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir> <dest-dir>
+ * This exe is called from a driver program, from which the args are guaranteed to be:
+ *
+ *  rain exe <algo> <t|r> <param_file> <src> <dest>
  *
  */
 

@@ -84,9 +84,11 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
 {
     cv::Mat flow;
 
-    cv::calcOpticalFlowFarneback( img1,                 // An input image
-                                  img2,                 // Image immediately subsequent to 'prevImg'
-                                  flow,                 // Flow vectors will be recorded here
+    // Calculate the ()reverse) optical flow field
+    // Note that we are calculating from img2 to img1. This is important
+    cv::calcOpticalFlowFarneback( img2,                // ** An input image
+                                  img1,                // ** Image immediately previous to img2
+                                  flow,                // Flow vectors will be recorded here
                                   this->scale,         // Scale between pyramid levels (< '1.0')
                                   this->levels,        // Number of pyramid levels
                                   this->smoothingSize, // Size of window for pre-smoothing pass
@@ -95,9 +97,22 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
                                   this->polyWidth,     // Width of fit polygon, usually '1.2*polyN'
                                   0 );                  // Option flags, combine with OR operator
 
+    // OK, here's where the (other) magic happens
+    // Create a mapping array from the flow data
+    cv::Mat map( flow.size(), CV_32FC2 );
+    for ( int y = 0; y < map.rows; ++y )
+    {
+        for ( int x = 0; x < map.cols; ++x )
+        {
+            const cv::Point2f& f = flow.at< cv::Point2f >( y, x );
+            map.at< cv::Point2f >( y, x ) = cv::Point2f( x + f.x, y + f.y );
+        }
+    }
+
+    // Nooow map that 
     cv::remap( img2,            // starting image for the extrapolation
                imgOut,          // output image
-               flow,            // mapping matrix
+               map,             // mapping matrix
                cv::Mat(),       // y mapping matrix, not needed here as flow is (x,y) data
                cv::INTER_LINEAR,   // interpolation method
                cv::BORDER_TRANSPARENT,  // border mode for extrapolations
@@ -130,6 +145,7 @@ const std::string FarnebackFlow::paramHeaders()
 const std::string FarnebackFlow::params()
 {
     std::stringstream osh;
+    float avg = (this->ssimScore[0] + this->ssimScore[1] + this->ssimScore[2] ) / 3.0;
 
     osh << "fb,"
         << this->scale <<','
@@ -139,7 +155,7 @@ const std::string FarnebackFlow::params()
         << this->polyArea << ','
         << this->polyWidth << ',' 
         << this->ssimScore[0] << ',' << this->ssimScore[1] << ',' << this->ssimScore[1] << ','
-        << cv::mean( this->ssimScore );
+        << avg;
 
     return osh.str();       // OK to return by value
 }
