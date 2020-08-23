@@ -70,6 +70,8 @@ def main( argc, argv ):
         pass
 
     # Now run the C++ exe
+    # The cmd is now: exe <algo> <t|r> <param_file> <src> <dest>
+    # Note that the C++ exe will assume this is correct, so bloddy get it right here
     args_out = [ __EXE, args.algo[0] ]
     if args.train is not None:
         args_out += [ 't', args.train[0] ]
