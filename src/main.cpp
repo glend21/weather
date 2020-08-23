@@ -81,6 +81,7 @@ struct FarnebackParams {
 
 // Fwd declarations, what a thing!
 bool processCmdLine( int argc, char** argv, struct CmdLineParams& params );
+bool processCmdLine_2(int argc, char** argv, struct CmdLineParams& params );
 bool train( const CmdLineParams& options );
 int run( const CmdLineParams& options );
 /*
@@ -136,13 +137,13 @@ int main( int argc, char **argv )
     */
 
     CmdLineParams options;
-    bool b = processCmdLine( argc, argv, options );
+    bool b = processCmdLine_2( argc, argv, options );
     std::cout << "res: " << b << std::endl;
     std::cout << "algo: " << options.algo << std::endl;
     std::cout << "train? " << options.doTrain << std::endl;
     std::cout << "param file name: " << options.paramFile << std::endl;
     std::cout << "src dir: " << options.srcDir << std::endl;
-    //std::cout << "dest dir: " << options.destDir << std::endl;
+    std::cout << "dest dir: " << options.destDir << std::endl;
     if ( ! b )
     {
         std::cout << "Usage: rain -a|--algo algo [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir> [<dest-dir>]" << std::endl;
@@ -200,6 +201,18 @@ bool processCmdLine( int argc, char** argv, struct CmdLineParams& params )
     }
 
     return false;
+}
+
+
+bool processCmdLine_2(int argc, char** argv, struct CmdLineParams& params )
+{
+    params.algo = *(++argv);
+    params.doTrain = **(++argv) == 't';
+    params.paramFile = *(++argv);
+    params.srcDir = *(++argv);
+    params.destDir = *(++argv);
+
+    return true;
 }
 
 

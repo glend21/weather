@@ -12,7 +12,7 @@ from datetime import datetime
 
 __ALGOS = [ "fb" ]
 __IMGTYPE = ".png"
-__EXE = "../src/main"       # FIXME big red flag
+__EXE = "../src/rain"       # FIXME big red flag
 
 
 def main( argc, argv ):
@@ -80,7 +80,8 @@ def main( argc, argv ):
     args_out += [ real_source, real_dest ]
 
     print( args_out )
-    # res = subprocess.run( args_out )
+    print( " ^ ^ ^ PYTHON ENDS HERE ^ ^ ^" )
+    res = subprocess.run( args_out )
 
 
 if __name__ == "__main__":
