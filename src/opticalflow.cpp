@@ -25,5 +25,3 @@ OpticalFlowABC& OpticalFlowABC::generate( const char* mnemonic, long limit )
         }
     }
 }
-
-

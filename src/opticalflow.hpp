@@ -25,7 +25,7 @@ protected:
     cv::Scalar ssimScore;
 
 public:
-    static OpticalFlowABC& generate( const char* mnemonic, long limit = 100l );
+    static OpticalFlowABC& generate( const char* mnemonic, long limit = 0l );
 
     virtual bool execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& imgOut ) = 0;
 

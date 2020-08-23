@@ -39,6 +39,7 @@ TODOs:
 #include <vector>
 #include <cstdarg>
 #include <thread>
+#include <chrono>
 
 #include "ssim.hpp"
 #include "opticalflow.hpp"
@@ -239,7 +240,7 @@ bool train( const CmdLineParams& options )
             {
                 std::stringstream path;
                 path << options.srcDir << '/' << fname;
-                dbg( "adding %s to src image list", path.str().c_str() );
+                // dbg( "adding %s to src image list", path.str().c_str() );
                 srcNames.push_back( path.str() );
                 srcData.push_back( cv::imread( path.str(), cv::IMREAD_COLOR ) );
             }
@@ -266,6 +267,9 @@ bool train( const CmdLineParams& options )
     std::stringstream outName;
     std::ofstream ofh;
 
+    // Start timer
+    std::chrono::steady_clock::time_point begin_all = std::chrono::steady_clock::now();
+
     try
     {
         outName << options.destDir << '/' << options.paramFile;
@@ -276,11 +280,13 @@ bool train( const CmdLineParams& options )
         }
 
         // Iterate over all parameter combinations, until generate() throws an exception
+        std::chrono::steady_clock::time_point begin_param;
         for ( long n = 0l; ; ++n )
         {
             dbg( "Param iteration: %d", n );
+            begin_param = std::chrono::steady_clock::now();
 
-            OpticalFlowABC& proc = OpticalFlowABC::generate( options.algo, 5 );
+            OpticalFlowABC& proc = OpticalFlowABC::generate( options.algo, 1 );
 
             // Write header to the parameter file on first iteration
             if (n == 0l)
@@ -294,7 +300,7 @@ bool train( const CmdLineParams& options )
             // Iterate over all image pairs (bar the last) for this set of algorithm parameters
             for ( int idx = 0; idx < srcData.size() - 2; ++idx )
             {
-                dbg( "   Image-pair iteration: %d", idx );
+                dbg( " Image-pair: %d %d", idx, idx + 1 );
 
                 if ( srcData[ idx ].data == NULL) dbg( "READ ERROR 1" );
                 if ( srcData[ idx + 1 ].data == NULL) dbg( "READ ERROR 2" );
@@ -334,14 +340,21 @@ bool train( const CmdLineParams& options )
                     << srcNames[ idx + 1 ] << ','
                     << srcNames[ idx + 2 ] << std::endl;
 
+                /*
                 if ( ! dbgImage( newImg ) )
                 {
                     exit( 0 );
                 }
+                */
             }
 
             delete &proc;
-        }
+
+            // End timer for this parameter set
+            std::chrono::steady_clock::time_point end_param = std::chrono::steady_clock::now();
+            std::cout << "Time for 1 parameter set: " 
+                      << std::chrono::duration_cast< std::chrono::milliseconds >(end_param- begin_param).count() << std::endl;
+        }   // for each parameter combination
 
         ofh.close();
     }
@@ -350,6 +363,12 @@ bool train( const CmdLineParams& options )
         std::cout << "Exception: " << ex.getMsg() << std::endl;
         ofh.close();
     }
+
+    // End timer for all data
+    std::chrono::steady_clock::time_point end_all = std::chrono::steady_clock::now();
+    std::cout << "Time for all processing: " 
+              << std::chrono::duration_cast< std::chrono::milliseconds >(end_all - begin_all).count() << std::endl;
+
     // - - -
 
     /*
@@ -443,7 +462,7 @@ bool processWithParam( const cv::Mat& img1,
     // Per-channel processing
     for( int chnl = 0; chnl < 3; ++chnl )
     {
-        dbg( "processing channel %d", chnl );
+        // dbg( "processing channel %d", chnl );
 
         std::thread task( processChannel_t, 
                           std::ref( chnls1[ chnl ] ),
