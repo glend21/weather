@@ -101,8 +101,8 @@ void processChannel_t( const cv::Mat& img1,
                        const cv::Mat& img2,
                        cv::Mat& dest,
                        OpticalFlowABC& proc );
+void addTransparency( IMGVEC& channels );
 void getChannels_t( const std::string& fname, IMGVEC& img );
-
 
 void buildParams( const std::string& fname, std::vector< FarnebackParams* >& params );
 void cleanupParams( std::vector< FarnebackParams* >& params );
@@ -113,6 +113,7 @@ void dbg( std::string fmt, ... );
 void usage();
 bool dbgImage( const cv::Mat& img );
 
+void myMerge(const cv::Mat* mv, size_t n, cv::OutputArray _dst);
 
 using namespace std;
 
@@ -242,7 +243,8 @@ bool train( const CmdLineParams& options )
                 path << options.srcDir << '/' << fname;
                 // dbg( "adding %s to src image list", path.str().c_str() );
                 srcNames.push_back( path.str() );
-                srcData.push_back( cv::imread( path.str(), cv::IMREAD_COLOR ) );
+                srcData.push_back( cv::imread( path.str(), cv::IMREAD_UNCHANGED ) );
+                dbg( "Read an image of (%d, %d, %d)", srcData.back().rows, srcData.back().cols, srcData.back().channels() );
             }
         }
 
@@ -307,7 +309,7 @@ bool train( const CmdLineParams& options )
                 if ( srcData[ idx + 2 ].data == NULL) dbg( "READ ERROR 3" );
 
                 // Generate the output image
-                cv::Mat newImg;
+                cv::Mat newImg( srcData[ idx ].size(), CV_8UC4 );   // BGRA output image
                 processWithParam( srcData[ idx ], 
                                   srcData[ idx + 1 ], 
                                   srcData[ idx + 2 ],
@@ -322,12 +324,12 @@ bool train( const CmdLineParams& options )
                         << std::setfill( '0' ) << std::setw( 2 ) << std::right << idx + 2
                         << '/' 
                         << std::setfill( '0' ) << std::setw( 5 ) << std::right << n
-                        << ".jpg";
+                        << IMG_TYPE;
                 dbg( "Output filename ~%s~", outName.str().c_str() );
 
                 if ( cv::imwrite( outName.str(), newImg ) )
                 {
-                    dbg( "Data saved." );
+                    dbg( "Data saved (%d %d %d).", newImg.rows, newImg.cols, newImg.channels() );
                 }
                 else
                 {
@@ -453,13 +455,13 @@ bool processWithParam( const cv::Mat& img1,
                        OpticalFlowABC& proc )
 {
     IMGVEC chnls1( 3 ), chnls2( 3 );    // per-channel image data
-    IMGVEC dest( 3 );       // generated single-channel image (NOT 1 3-channel image)
+    IMGVEC outChnls( 3 );                   // generated BGRA image channels
     std::vector< std::thread > tasks;  // pre-channel threads
 
     cv::split( img1, chnls1 );
     cv::split( img2, chnls2 );
 
-    // Per-channel processing
+    // Per-colour channel processing
     for( int chnl = 0; chnl < 3; ++chnl )
     {
         // dbg( "processing channel %d", chnl );
@@ -467,7 +469,7 @@ bool processWithParam( const cv::Mat& img1,
         std::thread task( processChannel_t, 
                           std::ref( chnls1[ chnl ] ),
                           std::ref( chnls2[ chnl ] ),
-                          std::ref( dest[ chnl ] ),
+                          std::ref( outChnls[ chnl ] ),
                           std::ref( proc ) );
         tasks.push_back( std::move( task ) );
     }
@@ -475,7 +477,14 @@ bool processWithParam( const cv::Mat& img1,
     std::for_each( tasks.begin(), tasks.end(), []( std::thread& p ) { p.join(); } ); 
 
     // I should now have the 3 channels of an output image. Let's see
-    cv::merge( dest, outImg );
+    //dest[ 3 ] = cv::Mat::zeros( dest[ 1 ].size(), dest[ 1 ].type() );
+    // dbg( "AAA dest: (%d, %d, %d)", dest[3].rows, dest[3].cols, dest[3].depth() );
+    // dbg( "AAA outImg: (%d, %d, %d)", outImg.rows, outImg.cols, outImg.depth() );
+
+    addTransparency( outChnls );
+    cv::merge( outChnls, outImg );
+    dbg( "Created image of shape (%d, %d, %d)", outImg.rows, outImg.cols, outImg.channels() );
+    dbg( "Created image of type %d", outImg.type() );
 
     // And use the full-colour structural similarity algorithm to determine our "fit"
     proc.storeFit( getMSSIM( outImg, test ) );
@@ -498,6 +507,33 @@ void processChannel_t( const cv::Mat& img1,
                        OpticalFlowABC& proc )
 {
     proc.execute( img1, img2, dest );
+}
+
+
+void addTransparency( IMGVEC& channels )
+{
+    cv::Mat tmp( channels[ 0 ].size(), channels[ 0 ].depth() ),
+            grey( channels[ 0 ].size(), channels[ 0 ].depth() ),
+            alpha( channels[ 0 ].size(), channels[ 0 ].depth() );
+
+    dbg( "C1   : (%d, %d) - %d", channels[0].size[0], channels[0].size[1], channels[0].depth() );
+    dbg( "C2   : (%d, %d) - %d", channels[1].size[0], channels[1].size[1], channels[1].depth() );
+    dbg( "C3   : (%d, %d) - %d", channels[2].size[0], channels[2].size[1], channels[2].depth() );
+    dbg( "tmp  : (%d, %d) - %d", tmp.cols, tmp.rows, tmp.depth() );
+    dbg( "grey : (%d, %d) - %d", grey.cols, grey.rows, grey.depth() );
+    dbg( "alpha: (%d, %d) - %d", alpha.cols, alpha.rows, alpha.depth() );
+
+    // Merge the input channels and convert to greyscale. 
+    cv::merge( channels, tmp );
+    //myMerge( &channels[0], channels.size(), tmp );
+    cv::cvtColor( tmp, grey, cv::COLOR_BGRA2GRAY );
+
+    // Threshold it so that any pixel with a colour value is converted to the max value
+    cv::threshold( grey, alpha, 0, 255, cv::THRESH_BINARY );
+
+    // Add that image as the alpha channel to outImg
+    //alpha.copyTo( channels[ 3 ] );
+    channels.push_back( alpha );
 }
 
 
@@ -626,3 +662,90 @@ void usage()
 {
     std::cout << "Usage: rain [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir>" << std::endl;
 }
+
+// - - -
+/*
+using namespace cv;
+
+void myMerge(const Mat* mv, size_t n, OutputArray _dst)
+{
+    //CV_INSTRUMENT_REGION();
+
+    CV_Assert( mv && n > 0 );
+
+    int depth = mv[0].depth();
+    bool allch1 = true;
+    int k, cn = 0;
+    size_t i;
+
+    for( i = 0; i < n; i++ )
+    {
+        CV_Assert(mv[i].size == mv[0].size && mv[i].depth() == depth);
+        allch1 = allch1 && mv[i].channels() == 1;
+        cn += mv[i].channels();
+    }
+
+    CV_Assert( 0 < cn && cn <= CV_CN_MAX );
+    _dst.create(mv[0].dims, mv[0].size, CV_MAKETYPE(depth, cn));
+    Mat dst = _dst.getMat();
+
+    if( n == 1 )
+    {
+        mv[0].copyTo(dst);
+        return;
+    }
+
+    CV_IPP_RUN(allch1, ipp_merge(mv, dst, (int)n));
+
+    if( !allch1 )
+    {
+        AutoBuffer<int> pairs(cn*2);
+        int j, ni=0;
+
+        for( i = 0, j = 0; i < n; i++, j += ni )
+        {
+            ni = mv[i].channels();
+            for( k = 0; k < ni; k++ )
+            {
+                pairs[(j+k)*2] = j + k;
+                pairs[(j+k)*2+1] = j + k;
+            }
+        }
+        mixChannels( mv, n, &dst, 1, &pairs[0], cn );
+        return;
+    }
+
+    MergeFunc func = getMergeFunc(depth);
+    CV_Assert( func != 0 );
+
+    size_t esz = dst.elemSize(), esz1 = dst.elemSize1();
+    size_t blocksize0 = (int)((BLOCK_SIZE + esz-1)/esz);
+    AutoBuffer<uchar> _buf((cn+1)*(sizeof(Mat*) + sizeof(uchar*)) + 16);
+    const Mat** arrays = (const Mat**)_buf.data();
+    uchar** ptrs = (uchar**)alignPtr(arrays + cn + 1, 16);
+
+    arrays[0] = &dst;
+    for( k = 0; k < cn; k++ )
+        arrays[k+1] = &mv[k];
+
+    NAryMatIterator it(arrays, ptrs, cn+1);
+    size_t total = (int)it.size;
+    size_t blocksize = std::min((size_t)CV_SPLIT_MERGE_MAX_BLOCK_SIZE(cn), cn <= 4 ? total : std::min(total, blocksize0));
+
+    for( i = 0; i < it.nplanes; i++, ++it )
+    {
+        for( size_t j = 0; j < total; j += blocksize )
+        {
+            size_t bsz = std::min(total - j, blocksize);
+            func( (const uchar**)&ptrs[1], ptrs[0], (int)bsz, cn );
+
+            if( j + blocksize < total )
+            {
+                ptrs[0] += bsz*esz;
+                for( int t = 0; t < cn; t++ )
+                    ptrs[t+1] += bsz*esz1;
+            }
+        }
+    }
+}
+*/

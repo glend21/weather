@@ -111,7 +111,7 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
                                   1.2,     // Width of fit polygon, usually '1.2*polyN'
                                   0 );                  // Option flags, combine with OR operator
 */
-    
+
     // OK, here's where the (other) magic happens
     // Create a mapping array from the flow data
     cv::Mat map( flow.size(), CV_32FC2 );
@@ -149,7 +149,7 @@ const std::string FarnebackFlow::paramHeaders()
         << "polyArea" << ','
         << "polyWidth" << ',' 
         << "ssimScore_B" << ','
-        << ">ssimScore_G" << ',' 
+        << "ssimScore_G" << ',' 
         << "ssimScore_R" << ','
         << "ssimScore_mean";
 
