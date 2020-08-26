@@ -24,6 +24,7 @@ TODOs:
 
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/utility.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgproc.hpp>
@@ -39,7 +40,6 @@ TODOs:
 #include <vector>
 #include <cstdarg>
 #include <thread>
-#include <chrono>
 
 #include "ssim.hpp"
 #include "opticalflow.hpp"
@@ -237,8 +237,7 @@ bool train( const CmdLineParams& options )
     std::ofstream ofh;
 
     // Start timer
-    std::chrono::steady_clock::time_point begin_all = std::chrono::steady_clock::now();
-
+    const double begin_all = (double) cv::getTickCount();
     try
     {
         outName << options.destDir << '/' << options.paramFile;
@@ -249,11 +248,11 @@ bool train( const CmdLineParams& options )
         }
 
         // Iterate over all parameter combinations, until generate() throws an exception
-        std::chrono::steady_clock::time_point begin_param;
+        double begin_param;
         for ( long n = 0l; ; ++n )
         {
             dbg( "Param iteration: %d", n );
-            begin_param = std::chrono::steady_clock::now();
+            begin_param = (double) cv::getTickCount();
 
             OpticalFlowABC& proc = OpticalFlowABC::generate( options.algo, 1 );
 
@@ -313,9 +312,9 @@ bool train( const CmdLineParams& options )
             delete &proc;
 
             // End timer for this parameter set
-            std::chrono::steady_clock::time_point end_param = std::chrono::steady_clock::now();
             std::cout << "Time for 1 parameter set: " 
-                      << std::chrono::duration_cast< std::chrono::milliseconds >(end_param- begin_param).count() << std::endl;
+                      << (cv::getTickCount() - begin_param) / cv::getTickFrequency()
+                      << std::endl;
         }   // for each parameter combination
 
         ofh.close();
@@ -327,9 +326,9 @@ bool train( const CmdLineParams& options )
     }
 
     // End timer for all data
-    std::chrono::steady_clock::time_point end_all = std::chrono::steady_clock::now();
     std::cout << "Time for all processing: " 
-              << std::chrono::duration_cast< std::chrono::milliseconds >(end_all - begin_all).count() << std::endl;
+              << (cv::getTickCount() - begin_all) / cv::getTickFrequency()
+              << std::endl;
 
     return 0;
 }
