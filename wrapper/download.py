@@ -39,6 +39,7 @@ def main( argc, cargv ):
         ftp.quit()
 
     except Exception as ex:
+        # As this will/may be run from a cron, leave at least a hint of what went wrong.
         msg = "FTP failed - %s" % ex
         ofp = open( os.path.join( newdir, "FtpFail.txt" ), "wt" )
         ofp.write( msg )
