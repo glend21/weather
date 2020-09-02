@@ -9,17 +9,10 @@
 
 /*
 TODOs:
-    SORT OF proper cmd-line
-    - output of generated images to subdir for visual inspection
-        - specify the output dir
-    - permutations of o-flow parameters (from input file)
-    - output of parameter file
-    - find max of the SSIM scalar (isn't it really a vector though?)
-
-    - [p] download of images
-        - all available for a radar site for training purposes
-        - only the last 2 for the site for production run
-    - call this exe from the python driver
+    - find max of the SSIM scalar 
+    - TVL1 algo is a stub
+    - "run" for actual image generation. This should be a wrapper around processing a single pair
+        of images, which we already do
 */
 
 
@@ -43,9 +36,10 @@ TODOs:
 
 #include "ssim.hpp"
 #include "opticalflow.hpp"
+#include "except.hpp"
 
 
-#define _DEBUG
+#define _DEBUG 1
 #define IMG_TYPE ".png"     // This gets used directly to build the input file list
 
 // Types
@@ -69,19 +63,8 @@ struct CmdLineParams {
     }
 };
 
-struct FarnebackParams {
-    float scale;
-    int levels,
-        smoothingSize,
-        iterations,
-        polyArea;
-    float polyWidth;
 
-    cv::Scalar ssimScore;
-};
-
-
-// Fwd declarations, what a thing!
+// Fwd declarations
 bool processCmdLine( int argc, char** argv, struct CmdLineParams& params );
 bool processCmdLine_2(int argc, char** argv, struct CmdLineParams& params );
 bool train( const CmdLineParams& options );
@@ -104,18 +87,19 @@ bool dbgImage( const cv::Mat& img );
 
 using namespace std;
 
+
 int main( int argc, char **argv )
 {
     int retval = 0;
 
     CmdLineParams options;
     bool b = processCmdLine_2( argc, argv, options );
-    std::cout << "res: " << b << std::endl;
-    std::cout << "algo: " << options.algo << std::endl;
-    std::cout << "train? " << options.doTrain << std::endl;
-    std::cout << "param file name: " << options.paramFile << std::endl;
-    std::cout << "src dir: " << options.srcDir << std::endl;
-    std::cout << "dest dir: " << options.destDir << std::endl;
+    dbg( "res: %d", b );
+    dbg( "algo: %s", options.algo );
+    dbg( "train? %d", options.doTrain );
+    dbg( "param file name: %s", options.paramFile ); 
+    dbg( "src dir: %s", options.srcDir );
+    dbg( "dest dir: %s", options.destDir );
     if ( ! b )
     {
         std::cout << "Usage: rain -a|--algo algo [-t|--train <param-out-file>] | [-r|--run <param-in-file>] <src-dir> [<dest-dir>]" << std::endl;
@@ -133,6 +117,7 @@ int main( int argc, char **argv )
 }
 
 
+// Deprecated. Was used when I was running this exe directly. 
 bool processCmdLine( int argc, char** argv, struct CmdLineParams& params )
 {
     if (argc > 1)
@@ -176,7 +161,8 @@ bool processCmdLine( int argc, char** argv, struct CmdLineParams& params )
 }
 
 
-bool processCmdLine_2(int argc, char** argv, struct CmdLineParams& params )
+// TODO think of a better name
+bool processCmdLine_2( int argc, char** argv, struct CmdLineParams& params )
 {
     params.algo = *(++argv);
     params.doTrain = **(++argv) == 't';
@@ -226,7 +212,7 @@ bool train( const CmdLineParams& options )
 
     if (srcNames.size() < 3)
     {
-        std::cout << "Need at least 3 images in the source dir";
+        dbg( "Need at least 3 images in source dir %s", options.srcDir );
         return EXIT_FAILURE;
     }
 
@@ -254,6 +240,8 @@ bool train( const CmdLineParams& options )
             dbg( "Param iteration: %d", n );
             begin_param = (double) cv::getTickCount();
 
+            // FIXME hard-coded to single param set for testing. The exhaustive set
+            // is a combinatorial explosion atm.
             OpticalFlowABC& proc = OpticalFlowABC::generate( options.algo, 1 );
 
             // Write header to the parameter file on first iteration
@@ -270,9 +258,21 @@ bool train( const CmdLineParams& options )
             {
                 dbg( " Image-pair: %d %d", idx, idx + 1 );
 
-                if ( srcData[ idx ].data == NULL) dbg( "READ ERROR 1" );
-                if ( srcData[ idx + 1 ].data == NULL) dbg( "READ ERROR 2" );
-                if ( srcData[ idx + 2 ].data == NULL) dbg( "READ ERROR 3" );
+                if ( srcData[ idx ].data == NULL )
+                {
+                    dbg( "Read error file 1 - %s", srcNames[ idx ] );
+                    throw RainException( "Image read error (see log)" );
+                }
+                if ( srcData[ idx + 1 ].data == NULL )
+                {
+                    dbg( "Read error file 2 - %s", srcNames[ idx ] );
+                    throw RainException( "Image read error (see log)" );
+                }
+                if ( srcData[ idx + 2 ].data == NULL )
+                {
+                    dbg( "Read error file 2 - %s", srcNames[ idx ] );
+                    throw RainException( "Image read error (see log)" );
+                }
 
                 // Generate the output image
                 cv::Mat newImg( srcData[ idx ].size(), CV_8UC4 );   // BGRA output image
@@ -283,6 +283,9 @@ bool train( const CmdLineParams& options )
                                   proc );
 
                 // Save the output image to the correct location
+                // Under the destDir, there is a folder for each pair of images. Each 
+                // algo and parameter set will (eventually) generate a separate image 
+                // in these folders.
                 outName.seekp( 0 );
                 outName << options.destDir << '/'
                         << std::setfill( '0' ) << std::setw( 2 ) << std::right << idx + 1
@@ -300,6 +303,7 @@ bool train( const CmdLineParams& options )
                 else
                 {
                     dbg( "NOT SAVED." );
+                    // Continue on - try next pair
                 }
 
                 // Save the parameter set
@@ -307,6 +311,7 @@ bool train( const CmdLineParams& options )
                     << srcNames[ idx ] << ','
                     << srcNames[ idx + 1 ] << ','
                     << srcNames[ idx + 2 ] << std::endl;
+                dbg( "Params written" );
             }
 
             delete &proc;
@@ -336,11 +341,12 @@ bool train( const CmdLineParams& options )
 
 int run( const CmdLineParams& options )
 {
-    return -1;
+    // TODO.
+    return EXIT_SUCCESS;
 }
 
 
-// Accepts 2 images, split into their BGR channels, a test image and a processor object
+// Accepts 2 images, split into their BGR channels; a test image and a processor object
 // Calls the processor to generate the output channels, combines them into a BGR output
 //  image, compares it to the test image.
 bool processWithParam( const cv::Mat& img1, 
@@ -350,7 +356,7 @@ bool processWithParam( const cv::Mat& img1,
                        OpticalFlowABC& proc )
 {
     IMGVEC chnls1( 3 ), chnls2( 3 );    // per-channel image data
-    IMGVEC outChnls( 3 );                   // generated BGRA image channels
+    IMGVEC outChnls( 3 );                   // generated BGR image channels
     std::vector< std::thread > tasks;  // pre-channel threads
 
     cv::split( img1, chnls1 );
@@ -382,6 +388,7 @@ bool processWithParam( const cv::Mat& img1,
 }
 
 
+// Wrapper fxn to make the threading call nicer
 void processChannel_t( const cv::Mat& img1,
                        const cv::Mat& img2,
                        cv::Mat& dest,
@@ -397,11 +404,12 @@ void addTransparency( IMGVEC& channels )
             grey( channels[ 0 ].size(), channels[ 0 ].depth() ),
             alpha( channels[ 0 ].size(), channels[ 0 ].depth() );
 
-    // Merge the input channels and convert to greyscale. 
+    // Merge the input channels and convert to greyscale.
+    // (grr that I have to do an extra merge here)
     cv::merge( channels, tmp );
-    cv::cvtColor( tmp, grey, cv::COLOR_BGRA2GRAY );
+    cv::cvtColor( tmp, grey, cv::COLOR_BGR2GRAY );
 
-    // Threshold it so that any pixel with a colour value is converted to the max value
+    // Threshold: a pixel with any colour value gives us the max value
     cv::threshold( grey, alpha, 0, 255, cv::THRESH_BINARY );
 
     // Add that image as the alpha channel to outImg
@@ -429,7 +437,7 @@ void dbg( const std::string fmt, ... )
 }
 
 
-// Return true to continue
+// Returns true to continue
 bool dbgImage( const cv::Mat& img )
 {
     cv::imshow( "dbgImage", img );

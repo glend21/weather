@@ -8,13 +8,12 @@
 
 #include <opencv2/core.hpp>
 
-#include "except.hpp"
-
 
 // The flow class itself
 class OpticalFlowABC
 {
 protected:
+    // Generate the next set of input parameters to the optical flow algo
     class Generator
     {
     public:

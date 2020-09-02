@@ -2,52 +2,15 @@
  * Structural Similarity calculation
  */
 
+/*
+ * Copied from the opencv docs here:
+ *  https://docs.opencv.org/2.4/doc/tutorials/highgui/video-input-psnr-ssim/video-input-psnr-ssim.html
+ */
+
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 
 /*
- for(;;) //Show the image captured in the window and repeat
-    {
-        captRefrnc >> frameReference;
-        captUndTst >> frameUnderTest;
-
-        if (frameReference.empty() || frameUnderTest.empty())
-        {
-            cout << " < < <  Game over!  > > > ";
-            break;
-        }
-
-        ++frameNum;
-        cout << "Frame: " << frameNum << "# ";
-
-        ///////////////////////////////// PSNR ////////////////////////////////////////////////////
-        psnrV = getPSNR(frameReference,frameUnderTest);
-        cout << setiosflags(ios::fixed) << setprecision(3) << psnrV << "dB";
-
-        //////////////////////////////////// MSSIM /////////////////////////////////////////////////
-        if (psnrV < psnrTriggerValue && psnrV)
-        {
-            mssimV = getMSSIM(frameReference, frameUnderTest);
-
-            cout << " MSSIM: "
-                << " R " << setiosflags(ios::fixed) << setprecision(2) << mssimV.val[2] * 100 << "%"
-                << " G " << setiosflags(ios::fixed) << setprecision(2) << mssimV.val[1] * 100 << "%"
-                << " B " << setiosflags(ios::fixed) << setprecision(2) << mssimV.val[0] * 100 << "%";
-        }
-
-        cout << endl;
-
-        ////////////////////////////////// Show Image /////////////////////////////////////////////
-        imshow(WIN_RF, frameReference);
-        imshow(WIN_UT, frameUnderTest);
-
-        c = (char)cvWaitKey(delay);
-        if (c == 27) break;
-    }
-
-    return 0;
-}
-
 double getPSNR(const Mat& I1, const Mat& I2)
 {
     Mat s1;

@@ -1,8 +1,11 @@
 
 #include "opticalflow.hpp"
-#include "farneback_flow.hpp"
 
 #include <string.h>
+
+#include "farneback_flow.hpp"
+#include "tvl1_flow.hpp"
+#include "except.hpp"
 
 
 OpticalFlowABC& OpticalFlowABC::generate( const char* mnemonic, long limit )
@@ -23,5 +26,13 @@ OpticalFlowABC& OpticalFlowABC::generate( const char* mnemonic, long limit )
             ++count;
             return gen();
         }
+        else if ( ! strcmp( mnemonic, "tvl") )
+        {
+            TVL1Flow::TVL1Generator gen;
+            ++count;
+            return gen();
+        }
     }
+
+    throw RainException( "Unknown optical flow algorithm" );
 }

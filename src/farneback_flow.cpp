@@ -5,12 +5,16 @@
 #include <sstream>
 
 #include <opencv2/video/tracking.hpp>
+#include "except.hpp"
 
 
 // The generator
 OpticalFlowABC& FarnebackFlow::FarnebackGenerator::operator()()
 {
     // This is where all the magic happens
+    // If, by "magic" I mean "brute force". This is a combinatorial explosion waiting to happen
+    // TODO: research an algorithm to find the max (in this case) of an n-dim value set
+    //       some sort of multivariate gradient (asc)ent ?
     static std::vector< float > vec_scale { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9 };
     static std::vector< float >::iterator itr_scale = vec_scale.begin();
     static std::vector< int > vec_levels { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
@@ -84,9 +88,9 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
 {
     cv::Mat flow;
 
-    // Calculate the ()reverse) optical flow field
+    // Calculate the (reverse) optical flow field
     // Note that we are calculating from img2 to img1. This is important
-///*
+/*
     cv::calcOpticalFlowFarneback( img2,                // ** An input image
                                   img1,                // ** Image immediately previous to img2
                                   flow,                // Flow vectors will be recorded here
@@ -97,9 +101,10 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
                                   this->polyArea,      // Area over which polynomial will be fit
                                   this->polyWidth,     // Width of fit polygon, usually '1.2*polyN'
                                   0 );                  // Option flags, combine with OR operator
-//*/
-/*
- * This is a custom parameter set which seems to be common
+*/
+///*
+ // This is parameter set I have seen in the literature
+ // Limited testing shows a better fit than the first few iterations of the brute force approach
     cv::calcOpticalFlowFarneback( img2,                // ** An input image
                                   img1,                // ** Image immediately previous to img2
                                   flow,                // Flow vectors will be recorded here
@@ -110,7 +115,7 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
                                   5,      // Area over which polynomial will be fit
                                   1.2,     // Width of fit polygon, usually '1.2*polyN'
                                   0 );                  // Option flags, combine with OR operator
-*/
+//*/
 
     // OK, here's where the (other) magic happens
     // Create a mapping array from the flow data
@@ -124,7 +129,7 @@ bool FarnebackFlow::execute( const cv::Mat& img1, const cv::Mat& img2, cv::Mat& 
         }
     }
 
-    // Nooow map that 
+    // Nooow map that to image 2
     cv::remap( img2,            // starting image for the extrapolation
                imgOut,          // output image
                map,             // mapping matrix

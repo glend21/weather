@@ -21,8 +21,6 @@ private:
         polyArea;
     float polyWidth;
 
-    //cv::Mat dest;       // FIXME this may move up to the base class
-
 public:
     class FarnebackGenerator : OpticalFlowABC::Generator
     {
