@@ -19,7 +19,7 @@ def main( argc, cargv ):
     basedir = "../data"
     subdirs = os.listdir( basedir )
     print( subdirs )
-    newdir = os.path.join( basedir, "%02d" % (int(subdirs[ -1 ]) + 1) )
+    newdir = os.path.join( basedir, "%02d-%s" % (int(subdirs[ -1 ].split('-')[0]) + 1, site) )
     print( newdir )
     os.mkdir( newdir )
 
