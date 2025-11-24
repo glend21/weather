@@ -1,4 +1,6 @@
 # weather
+
+## 1. rain
 Extrapolate rain radar images to estimate short-term projections
 
 General status notes (to my future self):
@@ -14,3 +16,9 @@ General status notes (to my future self):
     the brute-force approach is too expensive (and ugly)
 
 - visually, the generated images using Farneback (standard caveat -- limited testing) are almost usable
+
+## 2. planner
+Hit free public weather APIs to predict favourable conditions for photography. The conditions can be
+chosen based on cloud, wind, rain, moon position, etc
+
+Eventually this will be running as an AWS lambda or similar.
