@@ -49,109 +49,127 @@ class Stack():
 
 
 # ---
-def act_location( lex_stack: Stack ) -> (str, Any):
-	''' Acts on the location variable and returns a key, value pair '''
-	print( "act_location" )
+class Planner():
+	''' The top-level class '''
 
-	if len( lex_stack ) < 2:
-		return None
+	def __init__( self ):
+		''' Ctor '''
+		self._location: (float, float) = None
+		self._operations: Stack = Stack()	
 
-def act_wind( lex_stack: Stack ) -> int:			# FIXME
-	''' Handles the wind variable '''
-	print( "act_wind" )
-	breakpoint()
-	pass
+	def act_location( self, lex_stack: Stack ) -> (str, Any):
+		''' Acts on the location variable and returns a key, value pair '''
+		print( "act_location" )
 
+		if len( lex_stack ) < 2:
+			return None
 
-jump_table: { str: Callable } = {
-	"location" : act_location,
-	"wind" : act_wind,	
-}
-
-
-def parse( operation: str ) -> Stack | None:
-	''' Parse the operation string into a stack of lexical elements, first one
-		last in the stack (so it will be popped first, etc)
-	'''
-
-	# Define the grammar here, as this method will only be called once
-	loc_val: pp.ParseExpression  = ppc.number + pp.Suppress( ',' ) + ppc.number
-	location: pp.ParseExpression = pp.CaselessLiteral( "location" ) + pp.Suppress( '=' ) + loc_val
-	wind: pp.ParseExpression 	 = pp.CaselessLiteral( "wind" ) + pp.one_of( "> <" ) + ppc.number
-
-	grammar: pp.ParseExpression = pp.Or( [ location, wind ] ) 
-	lex = grammar.parse_string( operation )
-	print( lex )
-
-	retval = list( lex )
-	retval.reverse()			
-	return retval
+	def act_wind( self, lex_stack: Stack ) -> int:			# FIXME
+		''' Handles the wind variable '''
+		print( "act_wind" )
+		breakpoint()
+		pass
 
 
-def main() -> None:
-	''' It '''
-
-	# Read the config file, which will contain the definitions of what we are planning for
-
-	# Init
-	cache_session = requests_cache.CachedSession( ".cache", expire_after=3600 )
-	retry_session = retry( cache_session, retries=5, backoff_factor=0.2 )
-	openmeteo = openmeteo_requests.Client( session=retry_session )
-
-	# Always make the weather call, we will filter the results based on the specified operation
-	meteo_params: {} = {
-		"latitude" : 31.83,
-		"longitude" : 115.77,
-		"hourly" : [ "temperature_2m",
-					 "precipitation_probability",
-					 "precipitation",
-					 "cloud_cover",
-					 "wind_direction_10m",
-					 "wind_speed_10m"
-				   ]
+	jump_table: { str: Callable } = {
+		"location" : act_location,
+		"wind" : act_wind,	
 	}
 
-	response = openmeteo.weather_api( "https://api.open-meteo.com/v1/forecast",
-								      meteo_params )
-	hourly_data = response[ 0 ].Hourly()
-	h_temp = hourly_data.Variables( 0 ).ValuesAsNumpy()
-	h_precip_prob = hourly_data.Variables( 1 ).ValuesAsNumpy()
-	h_precip = hourly_data.Variables( 2 ).ValuesAsNumpy()
-	h_cloud = hourly_data.Variables( 3 ).ValuesAsNumpy()
-	h_wind_dir = hourly_data.Variables( 4 ).ValuesAsNumpy()
-	h_wind = hourly_data.Variables( 5 ).ValuesAsNumpy()
 
-	hourly = { "date" : pd.date_range( start=pd.to_datetime( hourly_data.Time(), unit='s', utc=False ),
-									   end=pd.to_datetime( hourly_data.TimeEnd(), unit='s', utc=False ),
-									   freq = pd.Timedelta( seconds=hourly_data.Interval() ),
-									   inclusive="left"
-									 )
-			 }
-	hourly[ "temperature_2m" ] = h_temp
-	hourly[ "precipitation" ] = h_precip
-	hourly[ "precipitation_prob" ] = h_precip_prob
-	hourly[ "cloud" ] = h_cloud
-	hourly[ "h_wind_dir" ] = h_wind_dir
-	hourly[ "wind" ] = h_wind
-	hourly_df = pd.DataFrame( data=hourly )
+	def parse( self, operation: str ) -> Stack | None:
+		''' Parse the operation string into a stack of lexical elements, first one
+			last in the stack (so it will be popped first, etc)
+		'''
 
-	print( "\nHourly data\n", hourly_df )
+		# Define the grammar here, as this method will only be called once
+		loc_val: pp.ParseExpression  = ppc.number + pp.Suppress( ',' ) + ppc.number
+		location: pp.ParseExpression = pp.CaselessLiteral( "location" ) + pp.Suppress( '=' ) + loc_val
+		wind: pp.ParseExpression 	 = pp.CaselessLiteral( "wind" ) + pp.one_of( "> <" ) + ppc.number
+
+		grammar: pp.ParseExpression = pp.Or( [ location, wind ] ) 
+		lex = grammar.parse_string( operation )
+		print( lex )
+
+		retval = list( lex )
+
+		if retval[ 0 ] == "location":
+			# There's always a special case
+			self._location = (retval[ 1 ], retval[ 2 ] )
+		else:
+			self._operations.push( retval )
+
+		return retval
+
+
+	def run( self ) -> None:
+		''' It '''
+
+		# Read the config file, which will contain the definitions of what we are planning for
+
+		if self._location is None:
+			print( "No location given." )
+			return
+
+		# Init
+		cache_session = requests_cache.CachedSession( ".cache", expire_after=3600 )
+		retry_session = retry( cache_session, retries=5, backoff_factor=0.2 )
+		openmeteo = openmeteo_requests.Client( session=retry_session )
+
+		# Always make the weather call, we will filter the results based on the specified operation
+		breakpoint()
+		meteo_params: {} = {
+			"latitude" : self._location[ 0 ],
+			"longitude" : self._location[ 1 ],
+			"hourly" : [ "temperature_2m",
+						 "precipitation_probability",
+						 "precipitation",
+						 "cloud_cover",
+						 "wind_direction_10m",
+						 "wind_speed_10m"
+					   ]
+		}
+
+		response = openmeteo.weather_api( "https://api.open-meteo.com/v1/forecast",
+									      meteo_params )
+		hourly_data = response[ 0 ].Hourly()
+		h_temp = hourly_data.Variables( 0 ).ValuesAsNumpy()
+		h_precip_prob = hourly_data.Variables( 1 ).ValuesAsNumpy()
+		h_precip = hourly_data.Variables( 2 ).ValuesAsNumpy()
+		h_cloud = hourly_data.Variables( 3 ).ValuesAsNumpy()
+		h_wind_dir = hourly_data.Variables( 4 ).ValuesAsNumpy()
+		h_wind = hourly_data.Variables( 5 ).ValuesAsNumpy()
+
+		hourly = { "date" : pd.date_range( start=pd.to_datetime( hourly_data.Time(), unit='s', utc=False ),
+										   end=pd.to_datetime( hourly_data.TimeEnd(), unit='s', utc=False ),
+										   freq = pd.Timedelta( seconds=hourly_data.Interval() ),
+										   inclusive="left"
+										 )
+				 }
+		hourly[ "temperature_2m" ] = h_temp
+		hourly[ "precipitation" ] = h_precip
+		hourly[ "precipitation_prob" ] = h_precip_prob
+		hourly[ "cloud" ] = h_cloud
+		hourly[ "h_wind_dir" ] = h_wind_dir
+		hourly[ "wind" ] = h_wind
+		hourly_df = pd.DataFrame( data=hourly )
+
+		print( "\nHourly data\n", hourly_df )
 
 
 if __name__ == "__main__":
-	#main()
 
-	operation = "location = 31.83, 115.77"
-	parse( operation )
-	operation = "wind > 35"
-	parse( operation )
-	operation = "wind < 22.22"
-	parse( operation )
-	operation = "WIND < 22.22"
-	ops: Stack = Stack( parse( operation ) )
+	planner: Planner = Planner()
 
-	while not ops.is_empty():
-		op = ops.pop()
-		if op in jump_table:
-			jump_table[ op ]( ops )
+	planner.parse( "location = -31.83, 115.77" )
+	planner.parse( "wind > 35" )
+	planner.parse( "wind < 22.22" )
 
+	planner.run()
+
+	# ops: Stack = Stack( planner.parse( "WIND < 22.22" ) )
+	#
+	# while not ops.is_empty():
+	# op = ops.pop()
+	# 	if op in planner.jump_table:
+	#		planner.jump_table[ op ]( planner, ops )
