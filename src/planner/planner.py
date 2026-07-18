@@ -4,7 +4,8 @@
 	GD Nov25
 '''
 
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
+import operator
 
 import openmeteo_requests
 import pandas as pd
@@ -13,6 +14,16 @@ from retry_requests import retry
 
 import pyparsing as pp
 from pyparsing import pyparsing_common as ppc
+
+
+_OPS = {
+    "<": operator.lt,
+    "<=": operator.le,
+    "==": operator.eq,
+    "!=": operator.ne,
+    ">=": operator.ge,
+    ">": operator.gt,
+}
 
 
 class Stack():
@@ -48,6 +59,13 @@ class Stack():
 		return str( self._data )
 
 
+class Expression( NamedTuple ):
+	''' Represents a single expression to match against '''
+	var: str
+	op: str
+	val: Any
+
+
 # ---
 class Planner():
 	''' The top-level class '''
@@ -55,26 +73,8 @@ class Planner():
 	def __init__( self ):
 		''' Ctor '''
 		self._location: (float, float) = None
-		self._operations: Stack = Stack()	
-
-	def act_location( self, lex_stack: Stack ) -> (str, Any):
-		''' Acts on the location variable and returns a key, value pair '''
-		print( "act_location" )
-
-		if len( lex_stack ) < 2:
-			return None
-
-	def act_wind( self, lex_stack: Stack ) -> int:			# FIXME
-		''' Handles the wind variable '''
-		print( "act_wind" )
-		breakpoint()
-		pass
-
-
-	jump_table: { str: Callable } = {
-		"location" : act_location,
-		"wind" : act_wind,	
-	}
+		self._expressions: Stack = Stack()
+		self._hourly_data: pd.DataFrame = None
 
 
 	def parse( self, operation: str ) -> Stack | None:
@@ -97,7 +97,7 @@ class Planner():
 			# There's always a special case
 			self._location = (retval[ 1 ], retval[ 2 ] )
 		else:
-			self._operations.push( retval )
+			self._expressions.push( retval )
 
 		return retval
 
@@ -117,7 +117,6 @@ class Planner():
 		openmeteo = openmeteo_requests.Client( session=retry_session )
 
 		# Always make the weather call, we will filter the results based on the specified operation
-		breakpoint()
 		meteo_params: {} = {
 			"latitude" : self._location[ 0 ],
 			"longitude" : self._location[ 1 ],
@@ -125,6 +124,9 @@ class Planner():
 						 "precipitation_probability",
 						 "precipitation",
 						 "cloud_cover",
+						 "cloud_cover_low",
+						 "cloud_cover_mid",
+						 "cloud_cover_high",
 						 "wind_direction_10m",
 						 "wind_speed_10m"
 					   ]
@@ -152,9 +154,24 @@ class Planner():
 		hourly[ "cloud" ] = h_cloud
 		hourly[ "h_wind_dir" ] = h_wind_dir
 		hourly[ "wind" ] = h_wind
-		hourly_df = pd.DataFrame( data=hourly )
+		self._hourly_data = pd.DataFrame( data=hourly )
+		print( "\nHourly data\n", self._hourly_data )
 
-		print( "\nHourly data\n", hourly_df )
+		# Filters are always ANDed
+		filtered: pd.DataFrame = self._hourly_data
+		while not self._expressions.is_empty():
+			expr: Expression = Expression._make( self._expressions.pop() )
+			filtered = self._filter( filtered, expr )
+			breakpoint()
+
+		filtered.apply( lambda r: print( "%s: wind = %f" % (r[ "date" ], r[ "wind" ]) ),
+						axis=1 )
+
+
+	def _filter( self, df: pd.DataFrame, expr: Expression ) -> pd.DataFrame:
+		''' Filters the input dataframe according to the components of the expression '''
+		return df[ _OPS[ expr.op ]( df[ expr.var ], expr.val ) ]
+
 
 
 if __name__ == "__main__":
@@ -162,8 +179,8 @@ if __name__ == "__main__":
 	planner: Planner = Planner()
 
 	planner.parse( "location = -31.83, 115.77" )
-	planner.parse( "wind > 35" )
-	planner.parse( "wind < 22.22" )
+	planner.parse( "wind < 35" )
+	planner.parse( "wind > 22.22" )
 
 	planner.run()
 
