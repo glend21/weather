@@ -116,44 +116,38 @@ class Planner():
 		retry_session = retry( cache_session, retries=5, backoff_factor=0.2 )
 		openmeteo = openmeteo_requests.Client( session=retry_session )
 
+		# Map the display name of each variable to it's API name
+		fields: { str, str } = { \
+			"temperature" : "temperature_2m",
+			"rain_prob" : "precipitation_probability",
+			"rain_amount" : "precipitation",
+			"cloud_total" : "cloud_cover",
+			"cloud_low" : "cloud_cover_low",
+			"cloud_Mid" : "cloud_cover_mid",
+			"cloud_high" : "cloud_cover_high",
+			"wind_dir" : "wind_direction_10m",
+			"wind" : "wind_speed_10m"
+		}
+
 		# Always make the weather call, we will filter the results based on the specified operation
 		meteo_params: {} = {
 			"latitude" : self._location[ 0 ],
 			"longitude" : self._location[ 1 ],
-			"hourly" : [ "temperature_2m",
-						 "precipitation_probability",
-						 "precipitation",
-						 "cloud_cover",
-						 "cloud_cover_low",
-						 "cloud_cover_mid",
-						 "cloud_cover_high",
-						 "wind_direction_10m",
-						 "wind_speed_10m"
-					   ]
+			"hourly" : [ val for val in fields.values() ]
 		}
 
 		response = openmeteo.weather_api( "https://api.open-meteo.com/v1/forecast",
 									      meteo_params )
 		hourly_data = response[ 0 ].Hourly()
-		h_temp = hourly_data.Variables( 0 ).ValuesAsNumpy()
-		h_precip_prob = hourly_data.Variables( 1 ).ValuesAsNumpy()
-		h_precip = hourly_data.Variables( 2 ).ValuesAsNumpy()
-		h_cloud = hourly_data.Variables( 3 ).ValuesAsNumpy()
-		h_wind_dir = hourly_data.Variables( 4 ).ValuesAsNumpy()
-		h_wind = hourly_data.Variables( 5 ).ValuesAsNumpy()
-
 		hourly = { "date" : pd.date_range( start=pd.to_datetime( hourly_data.Time(), unit='s', utc=False ),
 										   end=pd.to_datetime( hourly_data.TimeEnd(), unit='s', utc=False ),
 										   freq = pd.Timedelta( seconds=hourly_data.Interval() ),
 										   inclusive="left"
 										 )
-				 }
-		hourly[ "temperature_2m" ] = h_temp
-		hourly[ "precipitation" ] = h_precip
-		hourly[ "precipitation_prob" ] = h_precip_prob
-		hourly[ "cloud" ] = h_cloud
-		hourly[ "h_wind_dir" ] = h_wind_dir
-		hourly[ "wind" ] = h_wind
+				  }
+		hourly.update( { item[ 0 ]: hourly_data.Variables( idx ).ValuesAsNumpy() \
+						 for idx, item in enumerate( fields.items() ) } )
+
 		self._hourly_data = pd.DataFrame( data=hourly )
 		print( "\nHourly data\n", self._hourly_data )
 
@@ -162,9 +156,10 @@ class Planner():
 		while not self._expressions.is_empty():
 			expr: Expression = Expression._make( self._expressions.pop() )
 			filtered = self._filter( filtered, expr )
-			breakpoint()
 
 		filtered.apply( lambda r: print( "%s: wind = %f" % (r[ "date" ], r[ "wind" ]) ),
+						axis=1 )
+		filtered.apply( lambda r: print( r ),
 						axis=1 )
 
 
@@ -179,7 +174,7 @@ if __name__ == "__main__":
 	planner: Planner = Planner()
 
 	planner.parse( "location = -31.83, 115.77" )
-	planner.parse( "wind < 35" )
+	planner.parse( "wind < 28" )
 	planner.parse( "wind > 22.22" )
 
 	planner.run()

@@ -10,7 +10,9 @@ h11==0.16.0
 idna==3.11
 jh2==5.0.10
 kiwisolver==1.5.0
+markdown-it-py==4.2.0
 matplotlib==3.11.0
+mdurl==0.1.2
 niquests==3.15.2
 numpy==2.3.5
 openmeteo_requests==1.7.4
@@ -19,6 +21,7 @@ packaging==26.2
 pandas==2.3.3
 pillow==12.3.0
 platformdirs==4.5.0
+Pygments==2.20.0
 pyparsing==3.2.5
 python-dateutil==2.9.0.post0
 pytz==2025.2
@@ -26,6 +29,7 @@ qh3==1.5.6
 requests==2.32.5
 requests-cache==1.2.1
 retry-requests==2.0.0
+rich==15.0.0
 shapely==2.1.2
 six==1.17.0
 sundialy==0.0.1
