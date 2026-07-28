@@ -150,7 +150,7 @@ class Planner():
 	_astro_vars: [ str ] = [
 		"golden_hour",
 		"blue_hour",
-		"moon_phase"
+		"moon_phase",
 		"moon_percent"
 	]
 
@@ -181,7 +181,7 @@ class Planner():
 		# The astronomical conditional expressions
 		vars.append( pp.CaselessLiteral( "golden_hour" ) + '=' + pp.one_of( "morning evening" ) )
 		vars.append( pp.CaselessLiteral( "blue_hour" ) + '=' + pp.one_of( "morning evening" ) )
-		vars.append( pp.CaselessLiteral( "moonphase" ) + '=' + pp.Word( pp.alphas ) )
+		vars.append( pp.CaselessLiteral( "moon_phase" ) + '=' + pp.Word( pp.alphas ) )
 		vars.append( pp.CaselessLiteral( "moon_percent" ) + pp.one_of( "< >" ) + ppc.number )
 
 		self._grammar: pp.ParseExpression = pp.Or( vars )
@@ -191,10 +191,7 @@ class Planner():
 		''' Parse the operation string into a list of lexical elements and store internally
 			in the correct cache
 		'''
-		print( "--> '%s'" % operation )
 		lex = self._grammar.parse_string( operation )
-		print( lex )
-
 		retval = list( lex )
 
 		if retval[ 0 ] == "location":
@@ -224,6 +221,7 @@ class Planner():
 
 		for target in cfg.sections():
 			print( " === %s ===" % target )
+			self._do_init()
 			for opt in cfg.items( target ):
 				self.parse( target, opt )
 
@@ -234,11 +232,21 @@ class Planner():
 			hourly_data: pd.DataFrame = self._get_atomspheric_data()
 			if len( hourly_data ) > 0 and len( self._cond_astro ) > 0:
 				results: pd.Series = hourly_data.apply( self._filter_astronomical_data, axis=1 )
+			else:
+				results: pd.Series = pd.Series()
 
 			breakpoint()
 			print( "The following date/times match the criteria for %s:" % target )
 			for idx in results.index:
 				print( idx )
+
+
+	def _do_init( self ) -> None:
+		''' (Re-)initialise vars for each location '''
+		self._location = None
+		self._cond_atmo = []
+		self._cond_astro = []
+		self._hourly_data = None
 
 
 	def _get_atomspheric_data( self ) -> pd.DataFrame:
@@ -289,10 +297,9 @@ class Planner():
 		# Filters are always ANDed
 		filtered: pd.DataFrame = hourly_data
 		for cond in self._cond_atmo:
-			print( "1. *** '%s'" % cond )
 			expr: Expression = Expression._make( cond )
 			filtered = self._filter_col( filtered, expr )
-			print( "\t(%d)" % len( filtered ) )
+			print( "Atmospheric filter %s-> %d records" % (str( cond ), len( filtered )) )
 
 		return filtered
 
@@ -304,7 +311,6 @@ class Planner():
 
 		result: bool = True
 		for cond in self._cond_astro:
-			print( "2. *** '%s'" % cond )
 			expr = Expression._make( cond )
 			match expr.var:
 				case "golden_hour":
@@ -312,18 +318,19 @@ class Planner():
 																		   else astral.SunDirection.SETTING
 					rng: Tuple( datetime.datetime, datetime.datetime ) = \
 						self._location.golden_hour( sdir, dt.date() )
-					print( "%s: golden [%s -- %s]" % (str( dt ), str( rng[ 0 ] ), str( rng[ 1 ] )) )
-					result &= dt >= rng[ 0 ] and dt <= rng[ 0 ]
+					print( "%s: golden [%s -- %s]" % (str( dt.date() ), str( rng[ 0 ] ), str( rng[ 1 ] )) )
+					result &= dt >= rng[ 0 ] and dt <= rng[ 1 ]
 
 				case "blue_hour" : 
 					sdir: astral.SunDirection = astral.SunDirection.RISING if expr.val == "morning" \
 																		   else astral.SunDirection.SETTING
 					rng: Tuple( datetime.datetime, datetime.datetime ) = \
 						self._location.blue_hour( sdir, dt.date() )
-					print( "%s: blue [%s -- %s]" % (str( dt ), str( rng[ 0 ] ), str( rng[ 1 ] )) )
-					result &= dt >= rng[ 0 ] and dt <= rng[ 0 ]
+					print( "%s: blue [%s -- %s]" % (str( dt.date() ), str( rng[ 0 ] ), str( rng[ 1 ] )) )
+					result &= dt >= rng[ 0 ] and dt <= rng[ 1 ]
 
 				case "moon_phase" :
+					breakpoint()
 					phase: float = self._location.moon_phase( dt )
 					result &= (phase < 7.0 and expr.val == "new" ) or \
 							  (phase >= 7.0 and phase < 14.0 and expr.val == "first" ) or \
@@ -335,7 +342,7 @@ class Planner():
 					percent: float = phase * 100.0 / 28.0
 					result &= _OPS[ expr.op ]( percent, expr.val )
 
-			return row if result else None
+		return row if result else None
 
 
 	def _filter_col( self, df: pd.DataFrame, expr: Expression ) -> pd.DataFrame:
